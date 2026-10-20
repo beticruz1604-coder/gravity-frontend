@@ -33,54 +33,30 @@ import {
 
 import "./App.css";
 
-/* CONFIGURACIÓN API */
+import {
+  branching,
+  catalog,
+  scaffolder,
+  formatDate
+} from "./backstage";
+import {
+  TemplateModal,
+  TaskViewer,
+  statusClass,
+  TASK_STATUS_TEXT
+} from "./TemplateRunner";
+import {
+  HomologationPage,
+  RepositoriesPage,
+  PipelinesPage,
+  ReleasesPage,
+  TechDebtPage,
+  ComplianceIqPage,
+  SummaryPage,
+  ToolsHealthPage
+} from "./pages";
 
-const API_BASE_URL = "";
-
-const API_ENDPOINTS = {
-  pools: "/api/pools",
-  pipelines: "/api/pipelines",
-  registerComponent: "/api/components"
-};
-
-async function apiRequest(endpoint, options = {}) {
-  if (!API_BASE_URL) {
-    return null;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-
-  try {
-    const response = await fetch(
-      `${API_BASE_URL}${endpoint}`,
-      {
-        ...options,
-        headers: {
-          "Content-Type": "application/json",
-          ...(options.headers || {})
-        },
-        signal: controller.signal
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `Error ${response.status}: ${response.statusText}`
-      );
-    }
-
-    const text = await response.text();
-
-    if (!text) {
-      return null;
-    }
-
-    return JSON.parse(text);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+/* Todos los datos vienen de Backstage (ver backstage.js). */
 
 /*MENU*/
 
@@ -151,6 +127,20 @@ function normalizePool(item = {}) {
   };
 }
 
+function formatLastRun(run) {
+  if (!run) {
+    return "Sin ejecuciones";
+  }
+
+  if (typeof run === "string") {
+    return run;
+  }
+
+  return `${run.number ?? run.id} · ${formatDate(
+    run.finishedAt ?? run.startedAt
+  )}`;
+}
+
 function normalizePipeline(item = {}) {
   return {
     id:
@@ -184,10 +174,10 @@ function normalizePipeline(item = {}) {
       item.state ??
       "Sin información",
 
-    lastRun:
+    lastRun: formatLastRun(
       item.lastRun ??
-      item.lastExecution ??
-      "Sin ejecuciones",
+        item.lastExecution
+    ),
 
     executions:
       Number(
@@ -496,202 +486,6 @@ function AvailabilityChart({
 
 /*HOMOLOGATION*/
 
-function HomologationPage() {
-  const [tab, setTab] =
-    React.useState("infraestructura");
-
-  const [search, setSearch] =
-    React.useState("");
-
-  const [status, setStatus] =
-    React.useState("Todos");
-
-  const infrastructure = [];
-
-  const components = [];
-
-  const records =
-    tab === "infraestructura"
-      ? infrastructure
-      : components;
-
-  const filtered = records.filter((item) => {
-    const matchesSearch =
-      `${item.name} ${item.version} ${item.environment}`
-        .toLowerCase()
-        .includes(search.toLowerCase());
-
-    const matchesStatus =
-      status === "Todos" ||
-      item.status === status;
-
-    return (
-      matchesSearch &&
-      matchesStatus
-    );
-  });
-
-  return (
-    <section className="module-page">
-      <div className="module-heading">
-        <div>
-          <span className="module-eyebrow">
-            HOMOLOGACIÓN
-          </span>
-
-          <h1>
-            Homologation Status
-          </h1>
-
-          <p>
-            Consulta el estado de homologación
-            de infraestructura, plataformas y
-            componentes tecnológicos.
-          </p>
-        </div>
-      </div>
-
-      <div className="homologation-stats">
-        <div className="homologation-stat">
-          <span>
-            Elementos registrados
-          </span>
-
-          <strong>
-            {records.length}
-          </strong>
-        </div>
-
-        <div className="homologation-stat">
-          <span>Homologados</span>
-
-          <strong>
-            {
-              records.filter(
-                (x) =>
-                  x.status ===
-                  "Homologado"
-              ).length
-            }
-          </strong>
-        </div>
-
-        <div className="homologation-stat">
-          <span>Pendientes</span>
-
-          <strong>
-            {
-              records.filter(
-                (x) =>
-                  x.status ===
-                  "Pendiente"
-              ).length
-            }
-          </strong>
-        </div>
-
-        <div className="homologation-stat">
-          <span>En revisión</span>
-
-          <strong>
-            {
-              records.filter(
-                (x) =>
-                  x.status ===
-                  "En revisión"
-              ).length
-            }
-          </strong>
-        </div>
-      </div>
-
-      <div className="module-panel">
-        <div className="homologation-tabs">
-          <button
-            className={
-              tab === "infraestructura"
-                ? "selected"
-                : ""
-            }
-            onClick={() =>
-              setTab("infraestructura")
-            }
-          >
-            Infraestructura
-          </button>
-
-          <button
-            className={
-              tab === "componentes"
-                ? "selected"
-                : ""
-            }
-            onClick={() =>
-              setTab("componentes")
-            }
-          >
-            Componentes
-          </button>
-        </div>
-
-        <div className="homologation-toolbar">
-          <input
-            value={search}
-            onChange={(e) =>
-              setSearch(e.target.value)
-            }
-            placeholder="Buscar elemento..."
-          />
-
-          <select
-            value={status}
-            onChange={(e) =>
-              setStatus(e.target.value)
-            }
-          >
-            <option>Todos</option>
-            <option>Homologado</option>
-            <option>Pendiente</option>
-            <option>En revisión</option>
-          </select>
-        </div>
-
-        <div className="table-wrapper">
-          <table className="pool-table">
-            <thead>
-              <tr>
-                <th>Elemento</th>
-                <th>Versión / Tipo</th>
-                <th>Ambiente</th>
-                <th>Estado</th>
-                <th>Descripción</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filtered.length === 0 && (
-                <tr>
-                  <td
-                    colSpan="5"
-                    className="empty-table"
-                  >
-                    No hay información disponible.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="demo-notice">
-          <span className="demo-indicator" />
-          Sin información disponible.
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /*CREATE COMPONENT MODAL*/
 
 function CreateComponentModal({
@@ -757,50 +551,25 @@ function CreateComponentModal({
     setAnalyzing(true);
 
     try {
-      /*
-        Si existe un endpoint de análisis, se puede
-        utilizar aquí
-        Por ahora la validación se realiza localmente
-        para que el flujo funcione aunque todavía
-        no exista conexión
-      */
+      /* Backstage lee el catalog-info.yaml sin guardarlo y devuelve la entidad que se crearía. */
+      const preview = await catalog.dryRunRegister(url.trim());
+      const entity = (preview?.entities ?? [])[0];
 
-      if (API_BASE_URL) {
-        try {
-          await apiRequest(
-            `/components/analyze?url=${encodeURIComponent(
-              url
-            )}`
-          );
-        } catch {
-        }
-      }
-
-      if (!name) {
-        const segments =
-          url
-            .split("/")
-            .filter(Boolean);
-
-        const possibleName =
-          segments[
-            segments.length - 1
-          ] || "nuevo-componente";
-
-        setName(
-          possibleName
-            .replace(
-              ".git",
-              ""
-            )
-            .replace(
-              "catalog-info.yaml",
-              ""
-            )
+      if (!entity) {
+        setError(
+          "No se encontró ninguna entidad en esa URL. Usa la URL del catalog-info.yaml."
         );
+        return;
       }
+
+      setEntityType(entity.kind ?? "Component");
+      setName(entity.metadata?.name ?? "");
+      setDescription(entity.metadata?.description ?? "");
+      setOwner(entity.spec?.owner ?? "");
 
       setStep(2);
+    } catch (err) {
+      setError(err.message);
     } finally {
       setAnalyzing(false);
     }
@@ -845,17 +614,7 @@ function CreateComponentModal({
     };
 
     try {
-      if (API_BASE_URL) {
-        await apiRequest(
-          API_ENDPOINTS.registerComponent,
-          {
-            method: "POST",
-            body: JSON.stringify(
-              payload
-            )
-          }
-        );
-      }
+      await catalog.register(url.trim());
 
       setSuccess(true);
 
@@ -1027,6 +786,7 @@ function CreateComponentModal({
                 Tipo de entidad
                 <select
                   value={entityType}
+                  disabled
                   onChange={(e) =>
                     setEntityType(
                       e.target.value
@@ -1055,6 +815,7 @@ function CreateComponentModal({
                 Nombre del componente *
                 <input
                   value={name}
+                  disabled
                   onChange={(e) =>
                     setName(
                       e.target.value
@@ -1068,6 +829,7 @@ function CreateComponentModal({
                 Descripción
                 <textarea
                   value={description}
+                  disabled
                   onChange={(e) =>
                     setDescription(
                       e.target.value
@@ -1082,6 +844,7 @@ function CreateComponentModal({
                 Owner
                 <input
                   value={owner}
+                  disabled
                   onChange={(e) =>
                     setOwner(
                       e.target.value
@@ -1316,6 +1079,179 @@ function CreateComponentModal({
   );
 }
 
+/*TAREAS RECIENTES DEL IDP*/
+
+function RecentTasks({ version }) {
+  const [tasks, setTasks] =
+    React.useState([]);
+
+  const [error, setError] =
+    React.useState("");
+
+  const [openTask, setOpenTask] =
+    React.useState(null);
+
+  const load = React.useCallback(
+    async () => {
+      try {
+        const response =
+          await scaffolder.tasks(15);
+
+        setTasks(response.tasks ?? []);
+        setError("");
+      } catch (err) {
+        setError(err.message);
+      }
+    },
+    []
+  );
+
+  React.useEffect(() => {
+    load();
+
+    const interval =
+      setInterval(load, 10000);
+
+    return () =>
+      clearInterval(interval);
+  }, [load, version]);
+
+  return (
+    <div className="module-panel panel-spaced">
+      <div className="panel-title">
+        <strong>Tareas recientes</strong>
+        <small>
+          Historial de ejecuciones de plantillas
+          (Golden Paths y operaciones)
+        </small>
+      </div>
+
+      {error && (
+        <div className="module-error">
+          <AlertTriangle size={16} />
+          {error}
+        </div>
+      )}
+
+      <div className="table-wrapper">
+        <table className="pool-table">
+          <thead>
+            <tr>
+              <th>Plantilla</th>
+              <th>Estado</th>
+              <th>Creada</th>
+              <th>Por</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {tasks.length === 0 && (
+              <tr>
+                <td
+                  colSpan="5"
+                  className="empty-table"
+                >
+                  Sin tareas ejecutadas.
+                </td>
+              </tr>
+            )}
+
+            {tasks.map((task) => (
+              <tr key={task.id}>
+                <td>
+                  {task.spec?.templateInfo?.entityRef?.replace(
+                    "template:default/",
+                    ""
+                  )}
+                </td>
+
+                <td>
+                  <span
+                    className={statusClass(
+                      task.status
+                    )}
+                  >
+                    {TASK_STATUS_TEXT[
+                      task.status
+                    ] ?? task.status}
+                  </span>
+                </td>
+
+                <td>
+                  {formatDate(
+                    task.createdAt
+                  )}
+                </td>
+
+                <td>
+                  {task.createdBy?.replace(
+                    "user:",
+                    ""
+                  ) ?? "anónimo"}
+                </td>
+
+                <td>
+                  <button
+                    className="pipeline-action"
+                    onClick={() =>
+                      setOpenTask(task.id)
+                    }
+                  >
+                    Ver detalle
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {openTask && (
+        <div
+          className="modal-overlay"
+          onMouseDown={(e) =>
+            e.target ===
+              e.currentTarget &&
+            setOpenTask(null)
+          }
+        >
+          <div className="create-modal">
+            <div className="create-modal-header">
+              <div>
+                <span className="module-eyebrow">
+                  TAREA
+                </span>
+
+                <h2>
+                  Detalle de la ejecución
+                </h2>
+              </div>
+
+              <button
+                className="modal-close"
+                onClick={() =>
+                  setOpenTask(null)
+                }
+                aria-label="Cerrar"
+              >
+                <X size={19} />
+              </button>
+            </div>
+
+            <TaskViewer
+              taskId={openTask}
+              onClose={() =>
+                setOpenTask(null)
+              }
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /*PIPELINE ENGINE*/
 
 function PipelineEnginePage() {
@@ -1343,6 +1279,12 @@ function PipelineEnginePage() {
   const [showCreate, setShowCreate] =
     React.useState(false);
 
+  const [showRegister, setShowRegister] =
+    React.useState(false);
+
+  const [tasksVersion, setTasksVersion] =
+    React.useState(0);
+
   const loadPipelines = React.useCallback(
     async () => {
       setLoading(true);
@@ -1350,9 +1292,7 @@ function PipelineEnginePage() {
 
       try {
         const response =
-          await apiRequest(
-            API_ENDPOINTS.pipelines
-          );
+          await branching.pipelines();
 
         if (!response) {
           setPipelines([]);
@@ -1374,7 +1314,7 @@ function PipelineEnginePage() {
         setLastUpdated(
           new Date()
         );
-      } catch (err) {
+      } catch {
         setPipelines([]);
 
         setError(
@@ -1451,10 +1391,7 @@ function PipelineEnginePage() {
   const readyCount =
     pipelines.filter(
       (x) =>
-        x.status ===
-          "Listo para ejecutar" ||
-        x.status === "Ready" ||
-        x.status === "ready"
+        x.status === "Exitosa"
     ).length;
 
   function formatUpdated() {
@@ -1493,6 +1430,15 @@ function PipelineEnginePage() {
 
         <div className="pipeline-header-actions">
           <button
+            className="pipeline-action"
+            onClick={() =>
+              setShowRegister(true)
+            }
+          >
+            Registrar existente
+          </button>
+
+          <button
             className="create-button"
             onClick={() =>
               setShowCreate(true)
@@ -1517,7 +1463,7 @@ function PipelineEnginePage() {
 
         <div className="homologation-stat">
           <span>
-            Listos para ejecutar
+            Última ejecución exitosa
           </span>
 
           <strong>
@@ -1571,13 +1517,18 @@ function PipelineEnginePage() {
             }
           >
             <option>Todos</option>
-            <option>
-              Desarrollo
-            </option>
-            <option>QA</option>
-            <option>
-              Producción
-            </option>
+
+            {[
+              ...new Set(
+                pipelines
+                  .map((x) => x.environment)
+                  .filter((x) => x && x !== "—")
+              )
+            ].map((option) => (
+              <option key={option}>
+                {option}
+              </option>
+            ))}
           </select>
 
           <button
@@ -1799,20 +1750,31 @@ function PipelineEnginePage() {
           </span>
 
           <span>
-            {API_BASE_URL
-              ? "Conectado a fuente de datos"
-              : "Esperando conexión con fuente de datos"}
+            Backstage · /api/branching/pipelines
           </span>
         </div>
       </div>
 
+      <RecentTasks version={tasksVersion} />
+
       {showCreate && (
-        <CreateComponentModal
+        <TemplateModal
           onClose={() =>
             setShowCreate(false)
           }
+          onFinished={() => {
+            setTasksVersion((v) => v + 1);
+            loadPipelines();
+          }}
+        />
+      )}
+
+      {showRegister && (
+        <CreateComponentModal
+          onClose={() =>
+            setShowRegister(false)
+          }
           onCreated={() => {
-            setShowCreate(false);
             loadPipelines();
           }}
         />
@@ -1843,9 +1805,7 @@ function AgentPoolsPage() {
 
       try {
         const response =
-          await apiRequest(
-            API_ENDPOINTS.pools
-          );
+          await branching.agentPools();
 
         if (!response) {
           setPools([]);
@@ -2093,9 +2053,7 @@ function AgentPoolsPage() {
       <div className="demo-notice">
         <span className="demo-indicator" />
 
-        {API_BASE_URL
-          ? "Información actualizada desde la fuente de datos."
-          : "Sin conexión configurada. Los valores se muestran en 0 hasta recibir información."}
+        {error ? "No se pudo consultar Backstage." : "Información actualizada desde Backstage (Azure DevOps)."}
       </div>
     </>
   );
@@ -2131,7 +2089,7 @@ function App() {
     selectedPage,
     setSelectedPage
   ] = React.useState(
-    "Pool de Agentes"
+    "Resumen"
   );
 
   return (
@@ -2194,9 +2152,41 @@ function App() {
         </header>
 
         <div className="dashboard-content">
+          {selectedPage === "Resumen" && (
+            <SummaryPage
+              onNavigate={setSelectedPage}
+            />
+          )}
+
+          {selectedPage === "Repositories" && (
+            <RepositoriesPage />
+          )}
+
+          {selectedPage === "Pipelines" && (
+            <PipelinesPage />
+          )}
+
+          {selectedPage === "Releases" && (
+            <ReleasesPage />
+          )}
+
+          {selectedPage === "TechDebt" && (
+            <TechDebtPage />
+          )}
+
           {selectedPage ===
             "Pool de Agentes" && (
             <AgentPoolsPage />
+          )}
+
+          {selectedPage ===
+            "Compliance IQ" && (
+            <ComplianceIqPage />
+          )}
+
+          {selectedPage ===
+            "Tools Health" && (
+            <ToolsHealthPage />
           )}
 
           {selectedPage ===
@@ -2210,7 +2200,14 @@ function App() {
           )}
 
           {![
+            "Resumen",
+            "Repositories",
+            "Pipelines",
+            "Releases",
+            "TechDebt",
             "Pool de Agentes",
+            "Compliance IQ",
+            "Tools Health",
             "Homologation Status",
             "Pipeline Engine (IDP)"
           ].includes(
