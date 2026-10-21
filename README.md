@@ -19,3 +19,5 @@ If you are developing a production application, we recommend using TypeScript wi
 
 Este front consume Backstage (catálogo, plantillas, homologación, pipelines). Arranque, variables y alcance en
 `/home/daniel/backstage-lab/FRONTEND-GRAVITY.md`. Copia `.env.example` a `.env` si Backstage no está en `localhost:7007`.
+
+Despliegue en Cloud Run: `Dockerfile` y `deploy/nginx.conf.template`; pasos y riesgos en `FRONTEND-GRAVITY.md` (sección 5).

@@ -22,6 +22,7 @@ import {
   repoOf
 } from "./backstage";
 import { TemplateButton } from "./TemplateRunner";
+import { useNav } from "./nav";
 
 /*
  * Páginas de GRAVITY alimentadas por Backstage. Cada una reutiliza las clases de App.css (module-page, module-panel,
@@ -255,6 +256,7 @@ export function HomologationPage() {
 /* ------------------------------------------------------------ Repositories */
 
 export function RepositoriesPage() {
+  const { openEntity } = useNav();
   const loader = useData(async () => {
     const [components, rules, parity, baseline] = await Promise.all([
       catalog.components(),
@@ -329,7 +331,7 @@ export function RepositoriesPage() {
               {rows.map((row) => (
                 <tr key={row.name}>
                   <td>
-                    <Link href={annotation(row.entity, "backstage.io/view-url")?.replace(/\?path=.*/, "")}>{row.name}</Link>
+                    <button className="link-button" onClick={() => openEntity(`component:default/${row.name}`)}>{row.name}</button>
                   </td>
                   <td>{row.entity.spec?.type ?? "—"}</td>
                   <td>{String(row.entity.spec?.owner ?? "—").replace(/^group:default\//, "")}</td>
