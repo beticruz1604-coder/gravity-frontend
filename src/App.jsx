@@ -42,10 +42,12 @@ import {
 } from "./backstage";
 import {
   TemplateModal,
-  TaskViewer,
-  statusClass,
-  TASK_STATUS_TEXT
+  TaskViewer
 } from "./TemplateRunner";
+import {
+  PipelineStatus,
+  TaskStatus
+} from "./status";
 import { NavContext } from "./nav";
 import {
   CatalogPage,
@@ -1175,15 +1177,9 @@ function RecentTasks({ version }) {
                 </td>
 
                 <td>
-                  <span
-                    className={statusClass(
-                      task.status
-                    )}
-                  >
-                    {TASK_STATUS_TEXT[
-                      task.status
-                    ] ?? task.status}
-                  </span>
+                  <TaskStatus
+                    status={task.status}
+                  />
                 </td>
 
                 <td>
@@ -1638,11 +1634,9 @@ function PipelineEnginePage() {
                     </td>
 
                     <td>
-                      <span className="homologation-approved">
-                        {
-                          pipeline.status
-                        }
-                      </span>
+                      <PipelineStatus
+                        status={pipeline.status}
+                      />
                     </td>
 
                     <td>

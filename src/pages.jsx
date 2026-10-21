@@ -23,6 +23,7 @@ import {
 } from "./backstage";
 import { TemplateButton } from "./TemplateRunner";
 import { useNav } from "./nav";
+import { PipelineStatus, Percent } from "./status";
 
 /*
  * Páginas de GRAVITY alimentadas por Backstage. Cada una reutiliza las clases de App.css (module-page, module-panel,
@@ -156,13 +157,6 @@ function Link({ href, children }) {
 function runLink(run) {
   return run?.url ? <Link href={run.url}>{run.number ?? run.id}</Link> : "—";
 }
-
-const RESULT_CLASS = {
-  Exitosa: "homologation-approved",
-  Fallida: "homologation-pending",
-  "En ejecución": "homologation-review",
-  Cancelada: "homologation-pending"
-};
 
 /* ------------------------------------------------------------ Homologation */
 
@@ -374,8 +368,8 @@ export function PipelinesPage() {
         items={[
           ["Pipelines", all.length],
           ["Ejecuciones", runs],
-          ["Tasa de éxito", runs ? `${Math.round((succeeded / runs) * 100)}%` : "—"],
-          ["Con fallas", all.filter((p) => p.failed > 0).length]
+          ["Tasa de éxito", <Percent key="rate" value={runs ? Math.round((succeeded / runs) * 100) : null} />],
+          ["Última ejecución fallida", <span key="failed" className={all.some((p) => p.status === "Fallida") ? "status-text status-failed" : ""}>{all.filter((p) => p.status === "Fallida").length}</span>]
         ]}
       />
       <div className="module-panel">
@@ -409,10 +403,10 @@ export function PipelinesPage() {
                   <td>{p.type}</td>
                   <td>{p.environment}</td>
                   <td>{p.branch}</td>
-                  <td><span className={RESULT_CLASS[p.status] ?? "homologation-review"}>{p.status}</span></td>
+                  <td><PipelineStatus status={p.status} /></td>
                   <td>{runLink(p.lastRun)} <small>{formatDate(p.lastRun?.finishedAt ?? p.lastRun?.startedAt)}</small></td>
                   <td>{p.executions}</td>
-                  <td>{p.executions ? `${Math.round((p.succeeded / p.executions) * 100)}%` : "—"}</td>
+                  <td><Percent value={p.executions ? Math.round((p.succeeded / p.executions) * 100) : null} /></td>
                 </tr>
               ))}
             </tbody>
@@ -863,7 +857,7 @@ export function SummaryPage({ onNavigate }) {
         ], d.homologationItems?.error)}
         {card("Pipelines", "Pipelines", [
           ["Pipelines", pipelines.length],
-          ["Última ejecución fallida", failed],
+          ["Última ejecución fallida", <span key="failed" className={failed > 0 ? "status-text status-failed" : ""}>{failed}</span>],
           ["Ejecuciones", pipelines.reduce((sum, p) => sum + p.executions, 0)]
         ], d.pipelines?.error)}
         {card("Pool de agentes", "Pool de Agentes", [
