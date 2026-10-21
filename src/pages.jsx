@@ -265,7 +265,7 @@ export function RepositoriesPage() {
       homologation.baseline().catch(() => ({ items: [] }))
     ]);
     return { components, rules, parity: parity.items, baseline: baseline.items };
-  });
+  }, { interval: 60000 });
   const [search, setSearch] = React.useState("");
 
   const { components = [], rules, parity = [], baseline = [] } = loader.data ?? {};
@@ -506,7 +506,7 @@ export function TechDebtPage() {
   const loader = useData(async () => {
     const [baseline, cards] = await Promise.all([homologation.baseline(), scorecards.components().catch(() => [])]);
     return { baseline: baseline.items, cards };
-  });
+  }, { interval: 60000 });
 
   const debt = [];
   for (const item of loader.data?.baseline ?? []) {
@@ -723,7 +723,7 @@ export function ComplianceIqPage() {
   const loader = useData(async () => {
     const [rules, components] = await Promise.all([branching.rules(), catalog.components()]);
     return { rules, components: components.filter(isDeployable).map((e) => repoOf(e)) };
-  });
+  }, { interval: 60000 });
   const rules = loader.data?.rules;
   const components = loader.data?.components ?? [];
   const roles = rules?.roles ?? [];

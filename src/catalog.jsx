@@ -57,6 +57,16 @@ export function useEntities() {
   return { ...state, reload: () => load(true) };
 }
 
+/** Recarga el catálogo cada `ms` mientras la pantalla está abierta. */
+function useAutoRefresh(reload, ms = 60000) {
+  const ref = React.useRef(reload);
+  ref.current = reload;
+  React.useEffect(() => {
+    const timer = setInterval(() => ref.current(), ms);
+    return () => clearInterval(timer);
+  }, [ms]);
+}
+
 function useAsync(loader, deps) {
   const [state, setState] = React.useState({ loading: true });
   React.useEffect(() => {
@@ -260,6 +270,7 @@ export function RelationGraph({ entities, focus, showOwners }) {
 export function CatalogPage() {
   const { openEntity } = useNav();
   const loader = useEntities();
+  useAutoRefresh(loader.reload);
   const [kind, setKind] = React.useState("Component");
   const [search, setSearch] = React.useState("");
   const [type, setType] = React.useState("Todos");
