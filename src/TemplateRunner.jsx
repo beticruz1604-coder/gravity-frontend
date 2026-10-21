@@ -22,6 +22,7 @@ import {
   isDeployable,
   repoOf
 } from "./backstage";
+import { TASK_STATUS_TEXT, TaskStatus } from "./status";
 
 /*
  * Ejecutor de plantillas de Backstage dentro de GRAVITY.
@@ -677,23 +678,7 @@ function TemplateForm({ name, preset, onSubmit, onBack, backLabel }) {
 
 const TERMINAL = ["completed", "failed", "cancelled"];
 
-export const TASK_STATUS_TEXT = {
-  open: "En cola",
-  processing: "En ejecución",
-  completed: "Completada",
-  failed: "Fallida",
-  cancelled: "Cancelada"
-};
-
-export function statusClass(status) {
-  if (status === "completed") {
-    return "homologation-approved";
-  }
-  if (status === "failed" || status === "cancelled") {
-    return "homologation-pending";
-  }
-  return "homologation-review";
-}
+export { TASK_STATUS_TEXT };
 
 export function TaskViewer({ taskId, onClose, onFinished }) {
   const [task, setTask] = React.useState(null);
@@ -773,7 +758,7 @@ export function TaskViewer({ taskId, onClose, onFinished }) {
       <div className="create-modal-body">
         <div className="create-step-content">
           <div className="task-header">
-            <span className={statusClass(status)}>{TASK_STATUS_TEXT[status] ?? status}</span>
+            <TaskStatus status={status} />
             <small>{task?.spec?.templateInfo?.entityRef ?? ""} · {taskId}</small>
             {!TERMINAL.includes(status) && <Loader2 size={16} className="spin" />}
           </div>

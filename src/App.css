@@ -2461,3 +2461,124 @@ td.wrap {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- Colores de estado (pipelines y tareas) ---- */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-success {
+  color: #6de0b0;
+}
+
+.status-failed {
+  color: #f29ba3;
+}
+
+.status-running {
+  color: #8bbaff;
+}
+
+.status-queued {
+  color: #b7c2d3;
+}
+
+.status-warning {
+  color: #f2c76e;
+}
+
+.status-canceled {
+  color: #9aa5b5;
+}
+
+.status-none {
+  color: #65788b;
+}
+
+.status-pill.status-success {
+  background: rgba(38, 184, 125, 0.12);
+  border-color: rgba(38, 184, 125, 0.3);
+}
+
+.status-pill.status-failed {
+  background: rgba(212, 61, 78, 0.14);
+  border-color: rgba(212, 61, 78, 0.35);
+}
+
+.status-pill.status-running {
+  background: rgba(67, 132, 255, 0.13);
+  border-color: rgba(67, 132, 255, 0.35);
+}
+
+.status-pill.status-running .status-dot {
+  animation: status-pulse 1.4s ease-in-out infinite;
+}
+
+.status-pill.status-queued {
+  background: rgba(183, 194, 211, 0.1);
+  border-color: rgba(183, 194, 211, 0.25);
+}
+
+.status-pill.status-warning {
+  background: rgba(235, 174, 45, 0.12);
+  border-color: rgba(235, 174, 45, 0.3);
+}
+
+.status-pill.status-canceled,
+.status-pill.status-none {
+  background: rgba(154, 165, 181, 0.1);
+  border-color: rgba(154, 165, 181, 0.25);
+}
+
+.status-text {
+  font-weight: 600;
+}
+
+/* Tarjetas de resumen con valor en rojo cuando hay fallas */
+.homologation-stat strong.status-failed {
+  color: #f29ba3;
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Los valores coloreados dentro de las tarjetas conservan el tamaño del número */
+.homologation-stat strong span.status-text {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.homologation-stat strong span.status-success {
+  color: #6de0b0;
+}
+
+.homologation-stat strong span.status-warning {
+  color: #f2c76e;
+}
+
+.homologation-stat strong span.status-failed {
+  color: #f29ba3;
+}

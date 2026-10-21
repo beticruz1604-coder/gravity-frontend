@@ -22,6 +22,7 @@ import {
   formatDate
 } from "./backstage";
 import { useNav } from "./nav";
+import { PipelineStatus } from "./status";
 
 /*
  * Catálogo de Backstage dentro de GRAVITY: explorador de entidades, detalle por entidad (resumen, relaciones, CI/CD,
@@ -541,7 +542,7 @@ function Pipelines({ entity }) {
               <td>{p.name}</td>
               <td>{p.environment}</td>
               <td>{p.branch}</td>
-              <td>{p.status}</td>
+              <td><PipelineStatus status={p.status} /></td>
               <td>{p.lastRun?.url ? <ExternalA href={p.lastRun.url}>{p.lastRun.number ?? p.lastRun.id}</ExternalA> : "—"} <small>{formatDate(p.lastRun?.finishedAt)}</small></td>
               <td>{p.executions}</td>
             </tr>
