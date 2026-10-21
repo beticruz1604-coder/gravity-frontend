@@ -68,6 +68,9 @@ const enc = encodeURIComponent;
 /* Catálogo */
 
 export const catalog = {
+  all: () => request("/api/catalog/entities"),
+  byName: (kind, namespace, name) =>
+    request(`/api/catalog/entities/by-name/${enc(kind.toLowerCase())}/${enc(namespace)}/${enc(name)}`),
   components: () => request("/api/catalog/entities?filter=kind=component"),
   templates: () => request("/api/catalog/entities?filter=kind=template"),
   resources: () => request("/api/catalog/entities?filter=kind=resource"),
@@ -116,11 +119,39 @@ export const branching = {
 /* Homologación */
 
 export const homologation = {
+  component: (name) => request(`/api/homologation/components/${enc(name)}`, { timeout: 60000 }),
+  baselineOf: (name) => request(`/api/homologation/baseline/${enc(name)}`, { timeout: 60000 }),
   items: () => request("/api/homologation/items", { timeout: 60000 }),
   components: () => request("/api/homologation/components", { timeout: 60000 }),
   baseline: () => request("/api/homologation/baseline", { timeout: 60000 }),
   health: () => request("/api/homologation/health")
 };
+
+/* TechDocs y Kubernetes: solo consulta de disponibilidad; el contenido se abre en Backstage. */
+
+export const techdocs = {
+  metadata: (namespace, name) =>
+    request(`/api/techdocs/metadata/entity/${enc(namespace)}/component/${enc(name)}`)
+};
+
+export const kubernetes = {
+  clusters: () => request("/api/kubernetes/clusters"),
+  services: (serviceId, entity) =>
+    request(`/api/kubernetes/services/${enc(serviceId)}`, { method: "POST", body: { entity }, timeout: 60000 })
+};
+
+/** URL pública de la interfaz de Backstage, para los enlaces "Abrir en Backstage". */
+export const BACKSTAGE_UI_URL =
+  import.meta.env.VITE_BACKSTAGE_UI_URL ?? "https://backstage.backstage-lab.com";
+
+export function backstageEntityUrl(entity, path = "") {
+  const { kind, metadata } = entity;
+  return `${BACKSTAGE_UI_URL}/catalog/${metadata.namespace ?? "default"}/${kind.toLowerCase()}/${metadata.name}${path}`;
+}
+
+export function entityRef(entity) {
+  return `${entity.kind.toLowerCase()}:${entity.metadata.namespace ?? "default"}/${entity.metadata.name}`;
+}
 
 /* Indicadores de calidad por componente */
 
