@@ -28,7 +28,8 @@ import {
   Search,
   Loader2,
   ExternalLink,
-  UploadCloud
+  UploadCloud,
+  Library
 } from "lucide-react";
 
 import "./App.css";
@@ -45,6 +46,12 @@ import {
   statusClass,
   TASK_STATUS_TEXT
 } from "./TemplateRunner";
+import { NavContext } from "./nav";
+import {
+  CatalogPage,
+  EntityPage,
+  GlobalSearch
+} from "./catalog";
 import {
   HomologationPage,
   RepositoriesPage,
@@ -62,6 +69,7 @@ import {
 
 const menuItems = [
   { name: "Resumen", icon: LayoutDashboard },
+  { name: "Catálogo", icon: Library },
   { name: "Soporte DevSecOps", icon: Headset },
   { name: "Insights", icon: BarChart3 },
   { name: "Repositories", icon: GitBranch },
@@ -2092,15 +2100,35 @@ function App() {
     "Resumen"
   );
 
+  const [entityRef, setEntityRef] =
+    React.useState(null);
+
+  const navigate = React.useCallback(
+    (page) => {
+      setEntityRef(null);
+      setSelectedPage(page);
+    },
+    []
+  );
+
+  const navValue = React.useMemo(
+    () => ({
+      openEntity: setEntityRef,
+      navigate
+    }),
+    [navigate]
+  );
+
   return (
+    <NavContext.Provider value={navValue}>
     <div className="app">
       <Sidebar
         selectedPage={
-          selectedPage
+          entityRef
+            ? "Catálogo"
+            : selectedPage
         }
-        onNavigate={
-          setSelectedPage
-        }
+        onNavigate={navigate}
       />
 
       <main className="main">
@@ -2119,6 +2147,8 @@ function App() {
           </div>
 
           <div className="header-right">
+            <GlobalSearch />
+
             <div className="organization">
               <small>
                 AZURE ORGANIZATION
@@ -2152,55 +2182,70 @@ function App() {
         </header>
 
         <div className="dashboard-content">
-          {selectedPage === "Resumen" && (
+          {entityRef && (
+            <EntityPage
+              reference={entityRef}
+              onBack={() =>
+                setEntityRef(null)
+              }
+            />
+          )}
+
+          {!entityRef && selectedPage ===
+            "Catálogo" && (
+            <CatalogPage />
+          )}
+
+          {!entityRef && selectedPage === "Resumen" && (
             <SummaryPage
               onNavigate={setSelectedPage}
             />
           )}
 
-          {selectedPage === "Repositories" && (
+          {!entityRef && selectedPage === "Repositories" && (
             <RepositoriesPage />
           )}
 
-          {selectedPage === "Pipelines" && (
+          {!entityRef && selectedPage === "Pipelines" && (
             <PipelinesPage />
           )}
 
-          {selectedPage === "Releases" && (
+          {!entityRef && selectedPage === "Releases" && (
             <ReleasesPage />
           )}
 
-          {selectedPage === "TechDebt" && (
+          {!entityRef && selectedPage === "TechDebt" && (
             <TechDebtPage />
           )}
 
-          {selectedPage ===
+          {!entityRef && selectedPage ===
             "Pool de Agentes" && (
             <AgentPoolsPage />
           )}
 
-          {selectedPage ===
+          {!entityRef && selectedPage ===
             "Compliance IQ" && (
             <ComplianceIqPage />
           )}
 
-          {selectedPage ===
+          {!entityRef && selectedPage ===
             "Tools Health" && (
             <ToolsHealthPage />
           )}
 
-          {selectedPage ===
+          {!entityRef && selectedPage ===
             "Homologation Status" && (
             <HomologationPage />
           )}
 
-          {selectedPage ===
+          {!entityRef && selectedPage ===
             "Pipeline Engine (IDP)" && (
             <PipelineEnginePage />
           )}
 
-          {![
+          {!entityRef && ![
             "Resumen",
+            "Catálogo",
             "Repositories",
             "Pipelines",
             "Releases",
@@ -2222,6 +2267,7 @@ function App() {
         </div>
       </main>
     </div>
+    </NavContext.Provider>
   );
 }
 

@@ -2246,3 +2246,218 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---- Catálogo, detalle de entidades y grafo ---- */
+
+.link-button {
+  padding: 0;
+  color: #a9c5ff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-bottom: 14px;
+}
+
+.entity-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 19px;
+}
+
+.panel-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel-block > strong {
+  color: #edf3ff;
+  font-size: 12px;
+}
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kv-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 13px;
+  background: #0b141e;
+  border: 1px solid #26344a;
+  border-radius: 8px;
+}
+
+.kv-row span {
+  color: #65788b;
+  font-size: 10px;
+}
+
+.kv-row strong {
+  color: #dbe8f5;
+  font-size: 12px;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+td.wrap {
+  word-break: break-all;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.yaml-view {
+  max-height: 520px;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  color: #aab8c7;
+  background: #0b141e;
+  border: 1px solid #2a3c50;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #aab8c7;
+  font-size: 11px;
+}
+
+.inline-check input {
+  width: auto;
+}
+
+.graph-wrap {
+  padding: 12px 19px 18px;
+  overflow: auto;
+}
+
+.graph-svg {
+  display: block;
+}
+
+.graph-column {
+  fill: #65788b;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.graph-edge {
+  fill: none;
+  stroke: #314a70;
+  stroke-width: 1.2;
+}
+
+.graph-edge-active {
+  stroke: #5797ff;
+  stroke-width: 2;
+}
+
+.graph-node {
+  cursor: pointer;
+}
+
+.graph-node rect {
+  fill: #111f2d;
+  stroke-width: 1.4;
+}
+
+.graph-node:hover rect,
+.graph-node-focus rect {
+  fill: #182943;
+}
+
+.graph-node text {
+  fill: #dbe8f5;
+  font-size: 11px;
+}
+
+.global-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 34px;
+  color: #8d9ab0;
+  background: #0b141e;
+  border: 1px solid #26344a;
+  border-radius: 8px;
+}
+
+.global-search input {
+  width: 220px;
+  padding: 0;
+  color: #e0e8f1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 12px;
+}
+
+.search-results {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: #101923;
+  border: 1px solid #2b3d51;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.search-results button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  text-align: left;
+  color: #dbe8f5;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #1d2b3b;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.search-results button:hover {
+  background: #14263a;
+}
+
+.search-results small {
+  color: #65788b;
+  font-size: 10px;
+}
+
+@media (max-width: 900px) {
+  .kv-grid {
+    grid-template-columns: 1fr;
+  }
+}
