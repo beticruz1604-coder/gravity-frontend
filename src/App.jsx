@@ -1323,10 +1323,8 @@ function PipelineEnginePage() {
           new Date()
         );
       } catch {
-        setPipelines([]);
-
         setError(
-          "No fue posible consultar los pipelines."
+          "No fue posible consultar los pipelines. Se conservan los últimos datos."
         );
       } finally {
         setLoading(false);
@@ -1836,10 +1834,8 @@ function AgentPoolsPage() {
           new Date()
         );
       } catch {
-        setPools([]);
-
         setError(
-          "No fue posible consultar los pools."
+          "No fue posible consultar los pools. Se conservan los últimos datos."
         );
       } finally {
         setLoading(false);
