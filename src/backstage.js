@@ -17,7 +17,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path, { method = "GET", body, timeout = 30000 } = {}) {
+async function requestOnce(path, { method = "GET", body, timeout = 30000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
@@ -57,9 +57,29 @@ async function request(path, { method = "GET", body, timeout = 30000 } = {}) {
     if (err instanceof ApiError) {
       throw err;
     }
-    throw new ApiError("No se pudo conectar con Backstage.", 0);
+    const failure = new ApiError("No se pudo conectar con Backstage.", 0);
+    failure.network = true;
+    throw failure;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/** Estados que indican que el túnel hacia Backstage se cayó un momento (502/503/504 de nginx y 530 de Cloudflare). */
+const TRANSIENT = [502, 503, 504, 530];
+
+/** Las lecturas se reintentan una vez ante una caída breve; las escrituras nunca, para no ejecutar algo dos veces. */
+async function request(path, options = {}) {
+  try {
+    return await requestOnce(path, options);
+  } catch (err) {
+    const read = (options.method ?? "GET") === "GET";
+    const transient = TRANSIENT.includes(err.status) || err.network;
+    if (!read || !transient) {
+      throw err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return requestOnce(path, options);
   }
 }
 
