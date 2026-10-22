@@ -83,6 +83,13 @@ function validateStep(schema, values) {
       continue;
     }
 
+    if (definition["ui:field"] === "BranchNamePreview") {
+      if (required.has(name) && value !== "ok") {
+        errors[name] = "La rama ya existe o no cumple la estrategia: corrige los datos del paso anterior.";
+      }
+      continue;
+    }
+
     if (empty) {
       if (required.has(name) && definition.type !== "boolean") {
         errors[name] = "Campo obligatorio.";
@@ -373,7 +380,6 @@ function BranchField({ definition, required, value, onChange, error, options = {
 function PreviewField({ definition, onChange, options = {}, form }) {
   const repo = form[options.repoField];
   const source = form[options.sourceField];
-  const rfc = options.rfcField ? form[options.rfcField] : undefined;
   const [state, setState] = React.useState({});
 
   React.useEffect(() => {
@@ -386,7 +392,7 @@ function PreviewField({ definition, onChange, options = {}, form }) {
     setState({ loading: true });
     const timer = setTimeout(() => {
       branching
-        .preview({ project: options.project ?? PROJECT, repo, sourceBranch: source, rfc })
+        .preview({ project: options.project ?? PROJECT, repo, sourceBranch: source })
         .then((preview) => {
           if (!cancelled) {
             setState({ preview });
@@ -406,7 +412,7 @@ function PreviewField({ definition, onChange, options = {}, form }) {
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repo, source, rfc, options.project]);
+  }, [repo, source, options.project]);
 
   const { preview, error, loading } = state;
   let body;
@@ -466,6 +472,95 @@ function PreviewField({ definition, onChange, options = {}, form }) {
   );
 }
 
+/** Datos con los que se compone el nombre de una rama, según su tipo (clave de Jira, descripción, consecutivo y versión). */
+const BRANCH_NAME_PARTS = ["id", "description", "number", "version"];
+
+/**
+ * Comprobación de «Crear una rama» antes de ejecutar: calcula el nombre final, valida las convenciones y consulta si la
+ * rama ya existe. Si existe (o no cumple) bloquea el avance: el campo queda vacío hasta que el nombre sea válido y esté libre.
+ */
+function BranchNameField({ definition, onChange, options = {}, form }) {
+  const repo = form[options.repoField];
+  const role = form[options.roleField];
+  const from = form[options.fromField];
+  const parts = BRANCH_NAME_PARTS.map((key) => form[key] ?? "").join("|");
+  const [state, setState] = React.useState({});
+
+  React.useEffect(() => {
+    setState({});
+    if (!repo || !role || !from) {
+      onChange(undefined);
+      return undefined;
+    }
+    let cancelled = false;
+    setState({ loading: true });
+    const timer = setTimeout(() => {
+      const body = { project: options.project ?? PROJECT, repo, role, from };
+      BRANCH_NAME_PARTS.forEach((key) => {
+        if (form[key]) body[key] = form[key];
+      });
+      branching
+        .branchName(body)
+        .then((result) => {
+          if (!cancelled) {
+            setState({ result });
+            onChange(result.complete && result.valid ? "ok" : undefined);
+          }
+        })
+        .catch((err) => {
+          // Sin conexión no se bloquea: la ejecución vuelve a comprobarlo.
+          if (!cancelled) {
+            setState({ error: err.message });
+            onChange("ok");
+          }
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repo, role, from, parts, options.project]);
+
+  const { result, error, loading } = state;
+  let body;
+
+  if (!repo || !role || !from) {
+    body = <p>Completa el tipo de rama y de dónde se crea para comprobar el nombre.</p>;
+  } else if (loading) {
+    body = <p>Comprobando el nombre de la rama…</p>;
+  } else if (error) {
+    body = <p>No se pudo comprobar la rama ({error}). Se comprobará al ejecutar.</p>;
+  } else if (result && !result.complete) {
+    body = <p>Faltan datos para componer el nombre de la rama; vuelve al paso anterior.</p>;
+  } else if (result) {
+    body = result.valid ? (
+      <>
+        <p>
+          Se creará la rama <code>{result.name}</code>.
+        </p>
+        <p>No existe todavía en {repo}: se puede crear.</p>
+      </>
+    ) : (
+      <>
+        <p>
+          Se crearía la rama <code>{result.name}</code>.
+        </p>
+        {result.errors.map((message) => (
+          <p key={message} className="field-error">{message}</p>
+        ))}
+      </>
+    );
+  }
+
+  return (
+    <div className={`preview-box ${result && result.complete && !result.valid ? "preview-invalid" : ""}`}>
+      <strong>{definition.title}</strong>
+      {body}
+    </div>
+  );
+}
+
 function SchemaField({ name, definition, required, form, set, error, onBlock }) {
   const value = form[name];
   const common = { definition, required, value, error, onChange: (v) => set(name, v) };
@@ -482,6 +577,8 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
       return <BranchField {...common} options={options} form={form} />;
     case "PullRequestPreview":
       return <PreviewField definition={definition} onChange={common.onChange} options={options} form={form} />;
+    case "BranchNamePreview":
+      return <BranchNameField definition={definition} onChange={common.onChange} options={options} form={form} />;
     default:
       break;
   }

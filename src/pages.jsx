@@ -660,7 +660,7 @@ function PolicyCompliance({ components }) {
 }
 
 function ValidateSimulator({ components, rules }) {
-  const [form, setForm] = React.useState({ repo: "", sourceBranch: "", targetBranch: "", environment: "", rfc: "" });
+  const [form, setForm] = React.useState({ repo: "", sourceBranch: "", targetBranch: "", environment: "" });
   const [result, setResult] = React.useState(null);
   const [state, setState] = React.useState({});
   const set = (field) => (e) => setForm((current) => ({ ...current, [field]: e.target.value }));
@@ -675,7 +675,6 @@ function ValidateSimulator({ components, rules }) {
         sourceBranch: form.sourceBranch || undefined,
         targetBranch: form.targetBranch || undefined,
         environment: form.environment || undefined,
-        rfc: form.rfc || undefined,
         pullRequest: Boolean(form.targetBranch),
         deployment: Boolean(form.environment),
         checkRemote: false
@@ -706,7 +705,6 @@ function ValidateSimulator({ components, rules }) {
           <option value="">Sin despliegue</option>
           {Object.keys(rules?.deployments ?? {}).map((env) => <option key={env}>{env}</option>)}
         </select>
-        <input value={form.rfc} onChange={set("rfc")} placeholder="RFC-2026-0001" />
         <button className="create-primary-button" onClick={run} disabled={!form.repo || !form.sourceBranch || state.loading}>
           {state.loading ? <Loader2 size={15} className="spin" /> : "Validar"}
         </button>
