@@ -120,11 +120,20 @@ export function classification(entity) {
   };
 }
 
-function YesNo({ value }) {
-  if (value === "Sí") return <StatusPill tone="warning">Sí</StatusPill>;
-  if (value === "No") return <span className="status-text status-none">No</span>;
+/**
+ * "Sí" / "No" como insignia de color. Sin `noTone`, el «No» se muestra como texto gris (Legado: solo resalta el «Sí»).
+ * Con `noTone`, los dos valores se resaltan, cada uno con su color (Crítico: Sí en rojo y No en verde).
+ */
+function YesNo({ value, yesTone = "warning", noTone }) {
+  if (value === "Sí") return <StatusPill tone={yesTone}>Sí</StatusPill>;
+  if (value === "No") {
+    return noTone ? <StatusPill tone={noTone}>No</StatusPill> : <span className="status-text status-none">No</span>;
+  }
   return <span className="status-text status-none">—</span>;
 }
+
+const LegacyValue = ({ value }) => <YesNo value={value} />;
+const CriticalValue = ({ value }) => <YesNo value={value} yesTone="failed" noTone="success" />;
 
 function findByRef(entities, ref) {
   const [kindPart, rest] = ref.split(":");
@@ -178,6 +187,9 @@ function EntityLink({ entities, refText }) {
     </button>
   );
 }
+
+/** Categorías que se clasifican por División / Torre, Sistema / Iniciativa, Legado y Crítico. */
+const CLASSIFIED_KINDS = ["Component", "API", "Resource", "System", "Domain"];
 
 const KINDS = ["Component", "API", "Resource", "System", "Domain", "Group", "User", "Template"];
 const KIND_LABEL = {
@@ -317,6 +329,7 @@ export function CatalogPage() {
   const [showOwners, setShowOwners] = React.useState(false);
 
   const entities = loader.data ?? [];
+  const classified = CLASSIFIED_KINDS.includes(kind);
   const ofKind = entities.filter((e) => e.kind === kind);
   const types = [...new Set(ofKind.map((e) => e.spec?.type).filter(Boolean))];
   const rows = ofKind.filter((e) => {
@@ -390,32 +403,25 @@ export function CatalogPage() {
           <div className="table-wrapper">
             <table className="pool-table">
               <thead>
-                {kind === "Component" ? (
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Tipo</th>
-                    <th>Propietario</th>
-                    <th>División/Torre</th>
-                    <th>Sistema / Iniciativa</th>
-                    <th>Legado</th>
-                    <th>Crítico</th>
-                    <th>Etiquetas</th>
-                    <th>Descripción</th>
-                  </tr>
-                ) : (
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Tipo</th>
-                    <th>Propietario</th>
-                    <th>Sistema / ciclo de vida</th>
-                    <th>Etiquetas</th>
-                    <th>Descripción</th>
-                  </tr>
-                )}
+                <tr>
+                  <th>Nombre</th>
+                  <th>Tipo</th>
+                  <th>Propietario</th>
+                  {classified && (
+                    <>
+                      <th>División / Torre</th>
+                      <th>Sistema / Iniciativa</th>
+                      <th>Legado</th>
+                      <th>Crítico</th>
+                    </>
+                  )}
+                  <th>Etiquetas</th>
+                  <th>Descripción</th>
+                </tr>
               </thead>
               <tbody>
                 {rows.length === 0 && (
-                  <tr><td colSpan={kind === "Component" ? 9 : 6} className="empty-table">{loader.loading ? "Consultando información..." : "Sin entidades."}</td></tr>
+                  <tr><td colSpan={classified ? 9 : 5} className="empty-table">{loader.loading ? "Consultando información..." : "Sin entidades."}</td></tr>
                 )}
                 {rows.map((e) => {
                   const c = classification(e);
@@ -424,15 +430,13 @@ export function CatalogPage() {
                       <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{e.metadata.title ?? e.metadata.name}</button></td>
                       <td>{e.spec?.type ?? "—"}</td>
                       <td>{ownerLabel(e, entities)}</td>
-                      {kind === "Component" ? (
+                      {classified && (
                         <>
                           <td>{c.division ?? "—"}</td>
                           <td>{c.initiative ?? "—"}</td>
-                          <td><YesNo value={c.legacy} /></td>
-                          <td><YesNo value={c.critical} /></td>
+                          <td><LegacyValue value={c.legacy} /></td>
+                          <td><CriticalValue value={c.critical} /></td>
                         </>
-                      ) : (
-                        <td>{[e.spec?.system, e.spec?.lifecycle].filter(Boolean).join(" · ") || "—"}</td>
                       )}
                       <td>{(e.metadata.tags ?? []).slice(0, 4).join(", ")}</td>
                       <td>{e.metadata.description ?? "—"}</td>
@@ -521,10 +525,10 @@ function Overview({ entity, entities }) {
           ["Tipo", entity.spec?.type],
           ["Ciclo de vida", entity.spec?.lifecycle],
           ["Propietario", ownerRef ? <EntityLink entities={entities} refText={ownerRef} /> : ownerLabel(entity, entities)],
-          ["División/Torre", c.division],
+          ["División / Torre", c.division],
           ["Sistema / Iniciativa", c.initiative],
-          ["Legado", c.legacy],
-          ["Crítico", c.critical],
+          ["Legado", c.legacy && <LegacyValue value={c.legacy} />],
+          ["Crítico", c.critical && <CriticalValue value={c.critical} />],
           ["Sistema", partOf.length ? partOf.map((ref) => <EntityLink key={ref} entities={entities} refText={ref} />) : undefined],
           ["Namespace", m.namespace ?? "default"],
           ["Etiquetas", (m.tags ?? []).join(", ")],
