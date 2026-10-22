@@ -796,23 +796,34 @@ export function TaskViewer({ taskId, onClose, onFinished }) {
     setEvents([]);
     setTask(null);
 
-    async function poll() {
+    let done = false;
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    function append(fresh) {
+      if (fresh.length > 0) {
+        lastEvent.current = fresh[fresh.length - 1].id;
+        setEvents((all) => [...all, ...fresh]);
+      }
+    }
+
+    // Estado de la tarea: consulta rápida cada 2 s, independiente de los eventos.
+    async function pollStatus() {
       try {
-        const [current, fresh] = await Promise.all([
-          scaffolder.task(taskId),
-          scaffolder.events(taskId, lastEvent.current)
-        ]);
+        const current = await scaffolder.task(taskId);
         if (cancelled) {
           return;
         }
         setError("");
         setTask(current);
-        if (fresh.length > 0) {
-          lastEvent.current = fresh[fresh.length - 1].id;
-          setEvents((all) => [...all, ...fresh]);
-        }
         if (TERMINAL.includes(current.status)) {
-          if (!finished.current) {
+          done = true;
+          // Una última lectura de eventos para completar el registro y el resumen de la salida.
+          try {
+            append(await scaffolder.events(taskId, lastEvent.current));
+          } catch {
+            /* el registro puede quedar incompleto; el estado ya es el final */
+          }
+          if (!cancelled && !finished.current) {
             finished.current = true;
             onFinished?.(current);
           }
@@ -823,12 +834,31 @@ export function TaskViewer({ taskId, onClose, onFinished }) {
           setError(err.message);
         }
       }
-      if (!cancelled) {
-        timer = setTimeout(poll, 2000);
+      if (!cancelled && !done) {
+        timer = setTimeout(pollStatus, 2000);
       }
     }
 
-    poll();
+    // Eventos: Backstage mantiene la consulta abierta hasta ~30 s esperando eventos nuevos (espera larga), así que en los
+    // pasos largos y silenciosos tarda ese tiempo en responder. Va en un ciclo aparte y sin aviso de error: un corte de esa
+    // espera no es un fallo y no debe impedir que se actualice el estado.
+    async function pollEvents() {
+      while (!cancelled && !done) {
+        try {
+          const fresh = await scaffolder.events(taskId, lastEvent.current);
+          if (cancelled) {
+            return;
+          }
+          append(fresh);
+        } catch {
+          await sleep(2000);
+        }
+        await sleep(300);
+      }
+    }
+
+    pollStatus();
+    pollEvents();
     return () => {
       cancelled = true;
       clearTimeout(timer);
