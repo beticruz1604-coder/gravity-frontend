@@ -24,6 +24,7 @@ import {
 import { TemplateButton } from "./TemplateRunner";
 import { useNav } from "./nav";
 import { PipelineStatus, Percent } from "./status";
+import { ownerLabel } from "./catalog";
 
 /*
  * Páginas de GRAVITY alimentadas por Backstage. Cada una reutiliza las clases de App.css (module-page, module-panel,
@@ -221,12 +222,13 @@ export function HomologationPage() {
                 <th>Versión / Tipo</th>
                 <th>Ambiente</th>
                 <th>Estado</th>
+                <th>Motivo (por qué no está homologado)</th>
                 <th>Descripción</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <EmptyRow colSpan={5} loading={loader.loading && !loader.data}>No hay información disponible.</EmptyRow>
+                <EmptyRow colSpan={6} loading={loader.loading && !loader.data}>No hay información disponible.</EmptyRow>
               )}
               {filtered.map((item) => (
                 <tr key={item.id}>
@@ -234,7 +236,10 @@ export function HomologationPage() {
                   <td>{[item.type, item.version].filter(Boolean).join(" · ")}</td>
                   <td>{item.environment}</td>
                   <td><StatusBadge status={item.status} /></td>
-                  <td title={item.reason}>{item.reason ?? item.description}</td>
+                  <td className="wrap" title={item.reason}>
+                    {item.status === "homologado" ? <span className="status-text status-none">—</span> : (item.reason ?? "Sin detalle")}
+                  </td>
+                  <td>{item.description ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -252,17 +257,18 @@ export function HomologationPage() {
 export function RepositoriesPage() {
   const { openEntity } = useNav();
   const loader = useData(async () => {
-    const [components, rules, parity, baseline] = await Promise.all([
+    const [components, groups, rules, parity, baseline] = await Promise.all([
       catalog.components(),
+      catalog.groups().catch(() => []),
       branching.rules(),
       homologation.components().catch(() => ({ items: [] })),
       homologation.baseline().catch(() => ({ items: [] }))
     ]);
-    return { components, rules, parity: parity.items, baseline: baseline.items };
+    return { components, groups, rules, parity: parity.items, baseline: baseline.items };
   }, { interval: 60000 });
   const [search, setSearch] = React.useState("");
 
-  const { components = [], rules, parity = [], baseline = [] } = loader.data ?? {};
+  const { components = [], groups = [], rules, parity = [], baseline = [] } = loader.data ?? {};
   const rows = components
     .filter((entity) => annotation(entity, "dev.azure.com/project-repo"))
     .filter((entity) => entity.metadata.name.toLowerCase().includes(search.toLowerCase()))
@@ -328,7 +334,7 @@ export function RepositoriesPage() {
                     <button className="link-button" onClick={() => openEntity(`component:default/${row.name}`)}>{row.name}</button>
                   </td>
                   <td>{row.entity.spec?.type ?? "—"}</td>
-                  <td>{String(row.entity.spec?.owner ?? "—").replace(/^group:default\//, "")}</td>
+                  <td>{ownerLabel(row.entity, groups)}</td>
                   <td>{row.level}</td>
                   <td>{row.baseline ? <StatusBadge status={row.baseline.status === "conforme" ? "homologado" : "en-revision"} /> : "—"}</td>
                   <td>{row.parity ? <StatusBadge status={row.parity.status} /> : "—"}</td>
