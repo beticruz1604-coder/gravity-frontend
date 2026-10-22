@@ -500,7 +500,8 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
     return (
       <FieldShell definition={definition} required={required} error={error}>
         <select value={value ?? ""} onChange={(e) => set(name, e.target.value || undefined)}>
-          {!required && <option value="">—</option>}
+          {/* Sin valor elegido se muestra un marcador; si no, el navegador pintaría la primera opción como seleccionada. */}
+          {(!required || value === undefined) && <option value="">{required ? "Selecciona una opción" : "—"}</option>}
           {definition.enum.map((option, i) => (
             <option key={option} value={option}>
               {definition.enumNames?.[i] ?? option}
