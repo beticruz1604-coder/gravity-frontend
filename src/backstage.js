@@ -132,6 +132,8 @@ export const branching = {
   policies: (repo, project = PROJECT) =>
     request(`/api/branching/policies/${enc(project)}/${enc(repo)}`, { timeout: 60000 }),
   preview: (body) => request("/api/branching/preview", { method: "POST", body }),
+  /** Nombre final de la rama que se va a crear y si ya existe (formulario de «Crear una rama»). */
+  branchName: (body) => request("/api/branching/branch-name", { method: "POST", body }),
   validate: (body) => request("/api/branching/validate", { method: "POST", body }),
   health: () => request("/api/branching/health")
 };
