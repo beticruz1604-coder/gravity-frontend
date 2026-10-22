@@ -113,8 +113,9 @@ export const scaffolder = {
       body: { templateRef: `template:default/${name}`, values }
     }),
   task: (id) => request(`/api/scaffolder/v2/tasks/${enc(id)}`),
+  // Backstage espera hasta ~30 s a que haya eventos nuevos (espera larga): el límite debe ser mayor para no cortarla.
   events: (id, after = 0) =>
-    request(`/api/scaffolder/v2/tasks/${enc(id)}/events?after=${after}`),
+    request(`/api/scaffolder/v2/tasks/${enc(id)}/events?after=${after}`, { timeout: 60000 }),
   tasks: (limit = 30) => request(`/api/scaffolder/v2/tasks?limit=${limit}&order=desc:created_at`),
   cancel: (id) => request(`/api/scaffolder/v2/tasks/${enc(id)}/cancel`, { method: "POST" })
 };
