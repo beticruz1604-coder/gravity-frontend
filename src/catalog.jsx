@@ -22,7 +22,7 @@ import {
   formatDate
 } from "./backstage";
 import { useNav } from "./nav";
-import { PipelineStatus } from "./status";
+import { PipelineStatus, StatusPill } from "./status";
 
 /*
  * Catálogo de Backstage dentro de GRAVITY: explorador de entidades, detalle por entidad (resumen, relaciones, CI/CD,
@@ -85,7 +85,46 @@ function useAsync(loader, deps) {
 }
 
 const shortRef = (ref = "") => ref.replace(/^[a-z]+:default\//i, "");
-const ownerName = (entity) => shortRef(String(entity.spec?.owner ?? "—"));
+
+/** Nombre visible de una entidad: el de perfil (grupos), el título o, en su defecto, el identificador. */
+const displayName = (entity) => entity.spec?.profile?.displayName ?? entity.metadata.title ?? entity.metadata.name;
+
+/**
+ * Nombre del propietario tal como se muestra: el nombre visible del grupo (p. ej. "Cadena de Suministro"), no su
+ * identificador técnico (`development`). Si el grupo no está en el catálogo, se usa el identificador.
+ */
+export function ownerLabel(entity, entities = []) {
+  const ref = (entity.relations ?? []).find((r) => r.type === "ownedBy")?.targetRef ?? entity.spec?.owner;
+  if (!ref) return "—";
+  const full = String(ref).includes(":") ? String(ref) : `group:default/${ref}`;
+  const group = findByRef(entities, full);
+  return group?.spec?.profile?.displayName ?? group?.metadata?.title ?? shortRef(full);
+}
+
+/** "Sí" / "No" a partir de la anotación ("true", "false", "sí", "no"…); undefined si no está definida. */
+export function yesNo(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  return ["true", "si", "sí", "yes", "1"].includes(String(value).trim().toLowerCase()) ? "Sí" : "No";
+}
+
+/**
+ * Clasificación de negocio de una entidad, leída de las anotaciones del catalog-info.yaml:
+ *   devops.lab/division (OMS, TMS, WMS o Digital) · devops.lab/initiative (sistema o iniciativa) · devops.lab/legacy · devops.lab/critical
+ */
+export function classification(entity) {
+  return {
+    division: annotation(entity, "devops.lab/division"),
+    initiative: annotation(entity, "devops.lab/initiative"),
+    legacy: yesNo(annotation(entity, "devops.lab/legacy")),
+    critical: yesNo(annotation(entity, "devops.lab/critical"))
+  };
+}
+
+function YesNo({ value }) {
+  if (value === "Sí") return <StatusPill tone="warning">Sí</StatusPill>;
+  if (value === "No") return <span className="status-text status-none">No</span>;
+  return <span className="status-text status-none">—</span>;
+}
 
 function findByRef(entities, ref) {
   const [kindPart, rest] = ref.split(":");
@@ -135,7 +174,7 @@ function EntityLink({ entities, refText }) {
   }
   return (
     <button className="link-button" onClick={() => openEntity(entityRef(entity))}>
-      {entity.metadata.title ?? entity.metadata.name}
+      {displayName(entity)}
     </button>
   );
 }
@@ -258,7 +297,7 @@ export function RelationGraph({ entities, focus, showOwners }) {
             onMouseLeave={() => setHover(null)}
           >
             <rect width="170" height="28" rx="6" style={{ stroke: KIND_COLOR[entity.kind] }} />
-            <text x="10" y="18">{(entity.metadata.title ?? entity.metadata.name).slice(0, 24)}</text>
+            <text x="10" y="18">{displayName(entity).slice(0, 24)}</text>
           </g>
         ))}
       </svg>
@@ -281,7 +320,8 @@ export function CatalogPage() {
   const ofKind = entities.filter((e) => e.kind === kind);
   const types = [...new Set(ofKind.map((e) => e.spec?.type).filter(Boolean))];
   const rows = ofKind.filter((e) => {
-    const text = `${e.metadata.name} ${e.metadata.title ?? ""} ${e.metadata.description ?? ""} ${(e.metadata.tags ?? []).join(" ")}`.toLowerCase();
+    const c = classification(e);
+    const text = `${e.metadata.name} ${e.metadata.title ?? ""} ${e.metadata.description ?? ""} ${(e.metadata.tags ?? []).join(" ")} ${ownerLabel(e, entities)} ${c.division ?? ""} ${c.initiative ?? ""}`.toLowerCase();
     return text.includes(search.toLowerCase()) && (type === "Todos" || e.spec?.type === type);
   });
 
@@ -350,29 +390,55 @@ export function CatalogPage() {
           <div className="table-wrapper">
             <table className="pool-table">
               <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Tipo</th>
-                  <th>Propietario</th>
-                  <th>Sistema / ciclo de vida</th>
-                  <th>Etiquetas</th>
-                  <th>Descripción</th>
-                </tr>
+                {kind === "Component" ? (
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Tipo</th>
+                    <th>Propietario</th>
+                    <th>División/Torre</th>
+                    <th>Sistema / Iniciativa</th>
+                    <th>Legado</th>
+                    <th>Crítico</th>
+                    <th>Etiquetas</th>
+                    <th>Descripción</th>
+                  </tr>
+                ) : (
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Tipo</th>
+                    <th>Propietario</th>
+                    <th>Sistema / ciclo de vida</th>
+                    <th>Etiquetas</th>
+                    <th>Descripción</th>
+                  </tr>
+                )}
               </thead>
               <tbody>
                 {rows.length === 0 && (
-                  <tr><td colSpan="6" className="empty-table">{loader.loading ? "Consultando información..." : "Sin entidades."}</td></tr>
+                  <tr><td colSpan={kind === "Component" ? 9 : 6} className="empty-table">{loader.loading ? "Consultando información..." : "Sin entidades."}</td></tr>
                 )}
-                {rows.map((e) => (
-                  <tr key={entityRef(e)}>
-                    <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{e.metadata.title ?? e.metadata.name}</button></td>
-                    <td>{e.spec?.type ?? "—"}</td>
-                    <td>{ownerName(e)}</td>
-                    <td>{[e.spec?.system, e.spec?.lifecycle].filter(Boolean).join(" · ") || "—"}</td>
-                    <td>{(e.metadata.tags ?? []).slice(0, 4).join(", ")}</td>
-                    <td>{e.metadata.description ?? "—"}</td>
-                  </tr>
-                ))}
+                {rows.map((e) => {
+                  const c = classification(e);
+                  return (
+                    <tr key={entityRef(e)}>
+                      <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{e.metadata.title ?? e.metadata.name}</button></td>
+                      <td>{e.spec?.type ?? "—"}</td>
+                      <td>{ownerLabel(e, entities)}</td>
+                      {kind === "Component" ? (
+                        <>
+                          <td>{c.division ?? "—"}</td>
+                          <td>{c.initiative ?? "—"}</td>
+                          <td><YesNo value={c.legacy} /></td>
+                          <td><YesNo value={c.critical} /></td>
+                        </>
+                      ) : (
+                        <td>{[e.spec?.system, e.spec?.lifecycle].filter(Boolean).join(" · ") || "—"}</td>
+                      )}
+                      <td>{(e.metadata.tags ?? []).slice(0, 4).join(", ")}</td>
+                      <td>{e.metadata.description ?? "—"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -403,7 +469,7 @@ function OrganizationTable({ entities, kind, rows }) {
           {rows.map((e) =>
             kind === "Group" ? (
               <tr key={entityRef(e)}>
-                <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{e.metadata.title ?? e.metadata.name}</button></td>
+                <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{displayName(e)}</button></td>
                 <td>{e.spec?.type ?? "—"}</td>
                 <td>{e.spec?.parent ?? "—"}</td>
                 <td>{membersOf(e).join(", ") || "—"}</td>
@@ -445,6 +511,7 @@ function Overview({ entity, entities }) {
   const annotations = m.annotations ?? {};
   const links = m.links ?? [];
   const ownerRef = (entity.relations ?? []).find((r) => r.type === "ownedBy")?.targetRef;
+  const c = classification(entity);
   const partOf = (entity.relations ?? []).filter((r) => r.type === "partOf").map((r) => r.targetRef);
 
   return (
@@ -453,7 +520,11 @@ function Overview({ entity, entities }) {
         rows={[
           ["Tipo", entity.spec?.type],
           ["Ciclo de vida", entity.spec?.lifecycle],
-          ["Propietario", ownerRef ? <EntityLink entities={entities} refText={ownerRef} /> : entity.spec?.owner],
+          ["Propietario", ownerRef ? <EntityLink entities={entities} refText={ownerRef} /> : ownerLabel(entity, entities)],
+          ["División/Torre", c.division],
+          ["Sistema / Iniciativa", c.initiative],
+          ["Legado", c.legacy],
+          ["Crítico", c.critical],
           ["Sistema", partOf.length ? partOf.map((ref) => <EntityLink key={ref} entities={entities} refText={ref} />) : undefined],
           ["Namespace", m.namespace ?? "default"],
           ["Etiquetas", (m.tags ?? []).join(", ")],
