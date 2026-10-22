@@ -109,12 +109,12 @@ export function yesNo(value) {
 
 /**
  * Clasificación de negocio de una entidad, leída de las anotaciones del catalog-info.yaml:
- *   devops.lab/division (OMS, TMS o WMS) · devops.lab/product · devops.lab/legacy · devops.lab/critical
+ *   devops.lab/division (OMS, TMS, WMS o Digital) · devops.lab/initiative (sistema o iniciativa) · devops.lab/legacy · devops.lab/critical
  */
 export function classification(entity) {
   return {
     division: annotation(entity, "devops.lab/division"),
-    product: annotation(entity, "devops.lab/product"),
+    initiative: annotation(entity, "devops.lab/initiative"),
     legacy: yesNo(annotation(entity, "devops.lab/legacy")),
     critical: yesNo(annotation(entity, "devops.lab/critical"))
   };
@@ -321,7 +321,7 @@ export function CatalogPage() {
   const types = [...new Set(ofKind.map((e) => e.spec?.type).filter(Boolean))];
   const rows = ofKind.filter((e) => {
     const c = classification(e);
-    const text = `${e.metadata.name} ${e.metadata.title ?? ""} ${e.metadata.description ?? ""} ${(e.metadata.tags ?? []).join(" ")} ${ownerLabel(e, entities)} ${c.division ?? ""} ${c.product ?? ""}`.toLowerCase();
+    const text = `${e.metadata.name} ${e.metadata.title ?? ""} ${e.metadata.description ?? ""} ${(e.metadata.tags ?? []).join(" ")} ${ownerLabel(e, entities)} ${c.division ?? ""} ${c.initiative ?? ""}`.toLowerCase();
     return text.includes(search.toLowerCase()) && (type === "Todos" || e.spec?.type === type);
   });
 
@@ -396,7 +396,7 @@ export function CatalogPage() {
                     <th>Tipo</th>
                     <th>Propietario</th>
                     <th>División/Torre</th>
-                    <th>Producto</th>
+                    <th>Sistema / Iniciativa</th>
                     <th>Legado</th>
                     <th>Crítico</th>
                     <th>Etiquetas</th>
@@ -427,7 +427,7 @@ export function CatalogPage() {
                       {kind === "Component" ? (
                         <>
                           <td>{c.division ?? "—"}</td>
-                          <td>{c.product ?? "—"}</td>
+                          <td>{c.initiative ?? "—"}</td>
                           <td><YesNo value={c.legacy} /></td>
                           <td><YesNo value={c.critical} /></td>
                         </>
@@ -522,7 +522,7 @@ function Overview({ entity, entities }) {
           ["Ciclo de vida", entity.spec?.lifecycle],
           ["Propietario", ownerRef ? <EntityLink entities={entities} refText={ownerRef} /> : ownerLabel(entity, entities)],
           ["División/Torre", c.division],
-          ["Producto", c.product],
+          ["Sistema / Iniciativa", c.initiative],
           ["Legado", c.legacy],
           ["Crítico", c.critical],
           ["Sistema", partOf.length ? partOf.map((ref) => <EntityLink key={ref} entities={entities} refText={ref} />) : undefined],
