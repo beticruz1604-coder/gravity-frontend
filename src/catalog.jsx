@@ -114,7 +114,7 @@ export function yesNo(value) {
 export function classification(entity) {
   return {
     division: annotation(entity, "devops.lab/division"),
-    initiative: annotation(entity, "devops.lab/initiative"),
+    initiative: annotation(entity, "devops.lab/initiative") || undefined,
     legacy: yesNo(annotation(entity, "devops.lab/legacy")),
     critical: yesNo(annotation(entity, "devops.lab/critical"))
   };
