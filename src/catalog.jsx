@@ -120,11 +120,20 @@ export function classification(entity) {
   };
 }
 
-function YesNo({ value }) {
-  if (value === "Sí") return <StatusPill tone="warning">Sí</StatusPill>;
-  if (value === "No") return <span className="status-text status-none">No</span>;
+/**
+ * "Sí" / "No" como insignia de color. Sin `noTone`, el «No» se muestra como texto gris (Legado: solo resalta el «Sí»).
+ * Con `noTone`, los dos valores se resaltan, cada uno con su color (Crítico: Sí en rojo y No en verde).
+ */
+function YesNo({ value, yesTone = "warning", noTone }) {
+  if (value === "Sí") return <StatusPill tone={yesTone}>Sí</StatusPill>;
+  if (value === "No") {
+    return noTone ? <StatusPill tone={noTone}>No</StatusPill> : <span className="status-text status-none">No</span>;
+  }
   return <span className="status-text status-none">—</span>;
 }
+
+const LegacyValue = ({ value }) => <YesNo value={value} />;
+const CriticalValue = ({ value }) => <YesNo value={value} yesTone="failed" noTone="success" />;
 
 function findByRef(entities, ref) {
   const [kindPart, rest] = ref.split(":");
@@ -425,8 +434,8 @@ export function CatalogPage() {
                         <>
                           <td>{c.division ?? "—"}</td>
                           <td>{c.initiative ?? "—"}</td>
-                          <td><YesNo value={c.legacy} /></td>
-                          <td><YesNo value={c.critical} /></td>
+                          <td><LegacyValue value={c.legacy} /></td>
+                          <td><CriticalValue value={c.critical} /></td>
                         </>
                       )}
                       <td>{(e.metadata.tags ?? []).slice(0, 4).join(", ")}</td>
@@ -518,8 +527,8 @@ function Overview({ entity, entities }) {
           ["Propietario", ownerRef ? <EntityLink entities={entities} refText={ownerRef} /> : ownerLabel(entity, entities)],
           ["División / Torre", c.division],
           ["Sistema / Iniciativa", c.initiative],
-          ["Legado", c.legacy],
-          ["Crítico", c.critical],
+          ["Legado", c.legacy && <LegacyValue value={c.legacy} />],
+          ["Crítico", c.critical && <CriticalValue value={c.critical} />],
           ["Sistema", partOf.length ? partOf.map((ref) => <EntityLink key={ref} entities={entities} refText={ref} />) : undefined],
           ["Namespace", m.namespace ?? "default"],
           ["Etiquetas", (m.tags ?? []).join(", ")],
