@@ -331,7 +331,7 @@ export function RepositoriesPage() {
               {rows.map((row) => (
                 <tr key={row.name}>
                   <td>
-                    <button className="link-button" onClick={() => openEntity(`component:default/${row.name}`)}>{row.name}</button>
+                    <button className="link-button" onClick={() => openEntity(`component:default/${row.name}`)}>{row.entity.metadata.title ?? row.name}</button>
                   </td>
                   <td>{row.entity.spec?.type ?? "—"}</td>
                   <td>{ownerLabel(row.entity, groups)}</td>
@@ -427,7 +427,12 @@ export function PipelinesPage() {
 /* ---------------------------------------------------------------- Releases */
 
 export function ReleasesPage() {
-  const loader = useData(() => homologation.components(), { interval: 60000 });
+  const loader = useData(async () => {
+    const [parity, components] = await Promise.all([homologation.components(), catalog.components().catch(() => [])]);
+    // El plugin de homologación devuelve el identificador del componente; se muestra su nombre visible si lo tiene.
+    const titles = Object.fromEntries(components.filter((c) => c.metadata.title).map((c) => [c.metadata.name, c.metadata.title]));
+    return { ...parity, items: parity.items.map((item) => ({ ...item, label: titles[item.component] ?? item.component })) };
+  }, { interval: 60000 });
   const environments = loader.data?.environments ?? ["develop", "qa", "staging", "produccion"];
   const items = loader.data?.items ?? [];
 
@@ -467,7 +472,7 @@ export function ReleasesPage() {
               {items.length === 0 && <EmptyRow colSpan={environments.length + 3} loading={loader.loading && !loader.data}>No hay componentes con pipeline.</EmptyRow>}
               {items.map((item) => (
                 <tr key={item.component}>
-                  <td title={item.detail}>{item.component}</td>
+                  <td title={item.detail}>{item.label}</td>
                   <td><StatusBadge status={item.status} /></td>
                   {environments.map((env) => {
                     const cell = item.environments.find((e) => e.environment === env);

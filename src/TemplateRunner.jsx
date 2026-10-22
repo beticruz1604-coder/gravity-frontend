@@ -192,7 +192,9 @@ function ComponentField({ definition, required, value, onChange, error }) {
         <option value="">Selecciona un componente</option>
         {items.map((entity) => (
           <option key={entity.metadata.name} value={entity.metadata.name}>
-            {entity.metadata.name}
+            {entity.metadata.title && entity.metadata.title !== entity.metadata.name
+              ? `${entity.metadata.title} (${entity.metadata.name})`
+              : entity.metadata.name}
             {entity.metadata.annotations?.["devops.lab/golden-path"] ? " · Golden Path" : ""}
           </option>
         ))}
