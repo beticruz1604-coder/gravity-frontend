@@ -12,5 +12,6 @@ ENV BACKSTAGE_URL="" \
     BACKSTAGE_HOST="" \
     NGINX_ENVSUBST_FILTER="^(BACKSTAGE_URL|BACKSTAGE_HOST)$"
 COPY deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY deploy/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080
