@@ -49,6 +49,7 @@ import {
   TaskStatus
 } from "./status";
 import { NavContext } from "./nav";
+import { NewVersionBanner } from "./version";
 import {
   CatalogPage,
   EntityPage,
@@ -2112,6 +2113,7 @@ function App() {
   return (
     <NavContext.Provider value={navValue}>
     <div className="app">
+      <NewVersionBanner />
       <Sidebar
         selectedPage={
           entityRef
