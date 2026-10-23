@@ -164,6 +164,55 @@ function runLink(run) {
 const HOMOLOGATION_STATUS = ["Todos", "Homologado", "Pendiente", "En revisión"];
 const STATUS_ID = { Homologado: "homologado", Pendiente: "pendiente", "En revisión": "en-revision" };
 
+function List({ items }) {
+  return <ul className="requirements-list">{items.map((t) => <li key={t}>{t}</li>)}</ul>;
+}
+
+/** Qué se exige para estar homologado, leído de la configuración que de verdad aplica Backstage. */
+function RequirementsPanel({ tab }) {
+  const loader = useData(() => homologation.requirements(), { interval: 300000 });
+  const r = loader.data;
+  return (
+    <details className="requirements-panel">
+      <summary>Requisitos para estar homologado ({tab === "infraestructura" ? "infraestructura" : "componentes"})</summary>
+      <ErrorBox message={loader.error && `No fue posible consultar los requisitos. ${loader.error}`} />
+      {r && tab === "infraestructura" && (
+        <>
+          <h4>Cada recurso, contra su política del ambiente</h4>
+          {r.infrastructure.perResource.length === 0 && <p>No hay políticas de versión configuradas.</p>}
+          {r.infrastructure.perResource.map((x) => (
+            <div key={x.type}><strong>{x.type}</strong><List items={x.rules} /></div>
+          ))}
+          <h4>Entre ambientes</h4>
+          <p>
+            Los ambientes se comparan en este orden: {r.infrastructure.environments.join(" → ") || "—"}
+            {r.infrastructure.optionalEnvironments.length > 0 && ` (opcionales mientras no existan: ${r.infrastructure.optionalEnvironments.join(", ")})`}.
+            Un recurso queda homologado cuando es igual en todos los ambientes existentes:
+          </p>
+          <List items={r.infrastructure.betweenEnvironments.map((g) => `${g.title}: debe tener ${g.compares} igual en todos los ambientes.`)} />
+        </>
+      )}
+      {r && tab !== "infraestructura" && (
+        <>
+          <h4>Despliegue entre ambientes ({r.components.environments.join(" → ")})</h4>
+          <List items={r.components.deployment} />
+          <h4>Línea base por tecnología</h4>
+          {r.components.technologies.map((t) => (
+            <div key={t.id}>
+              <strong>{t.title}</strong> <small>(se detecta por {t.detect})</small>
+              <List
+                items={t.checks.map(
+                  (c) => `${c.title}${c.required ? "" : " (informativo)"}: aprobadas ${c.approved.join(", ") || "—"}${c.review.length ? ` · en revisión ${c.review.join(", ")}` : ""}.`
+                )}
+              />
+            </div>
+          ))}
+        </>
+      )}
+    </details>
+  );
+}
+
 export function HomologationPage() {
   const [tab, setTab] = React.useState("infraestructura");
   const [search, setSearch] = React.useState("");
@@ -200,6 +249,8 @@ export function HomologationPage() {
           <button className={tab === "infraestructura" ? "selected" : ""} onClick={() => setTab("infraestructura")}>Infraestructura</button>
           <button className={tab === "componentes" ? "selected" : ""} onClick={() => setTab("componentes")}>Componentes</button>
         </div>
+
+        <RequirementsPanel tab={tab} />
 
         <div className="homologation-toolbar">
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar elemento..." />

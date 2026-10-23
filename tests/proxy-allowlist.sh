@@ -29,7 +29,7 @@ espera() { # espera <código> <método> <ruta>
   if [ "$got" != "$1" ]; then echo "FALLO: $2 $3 -> $got (se esperaba $1)"; fallos=$((fallos + 1)); fi
 }
 for p in /backstage/api/catalog/entities "/backstage/api/catalog/entities?filter=kind=component" /backstage/api/catalog/entities/by-name/component/default/x \
-         /backstage/api/branching/rules /backstage/api/branching/pipelines/demos /backstage/api/branching/branches/demos/x /backstage/api/homologation/items \
+         /backstage/api/branching/rules /backstage/api/branching/pipelines/demos /backstage/api/branching/branches/demos/x /backstage/api/homologation/items /backstage/api/homologation/requirements \
          /backstage/api/homologation/components/x /backstage/api/scaffolder/v2/tasks /backstage/api/scaffolder/v2/tasks/abc/events \
          /backstage/api/scaffolder/v2/templates/default/template/crear-rama/parameter-schema /backstage/api/kubernetes/clusters /backstage/api/scorecards/components; do
   espera 200 GET "$p"
