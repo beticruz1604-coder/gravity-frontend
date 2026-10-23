@@ -18,6 +18,14 @@ map $request_method $clave_escritura {
 }
 limit_req_zone $clave_escritura zone=escrituras:10m rate=10r/s;
 
+# ── Credencial hacia Backstage ──────────────────────────────────────────────
+# Con BACKSTAGE_TOKEN definido (secreto backstage-front-token) nginx envía «Authorization: Bearer <token>» en cada llamada a
+# Backstage y sustituye cualquier cabecera Authorization del navegador. Sin él (desarrollo local) deja pasar la del cliente.
+map "${BACKSTAGE_TOKEN}" $backstage_authorization {
+  ""      $http_authorization;
+  default "Bearer ${BACKSTAGE_TOKEN}";
+}
+
 # ── Lista de rutas de Backstage que el front necesita ──────────────────────
 # Todo lo demás recibe 403. Se evalúa sobre $uri (ya decodificado y normalizado: «..» y %2e%2e no pasan) y el método.
 # Para el registro de un componente por URL solo se permite la simulación (dryRun); registrarlo de verdad queda bloqueado
@@ -55,6 +63,7 @@ server {
     proxy_http_version 1.1;
     proxy_ssl_server_name on;
     proxy_set_header Host ${BACKSTAGE_HOST};
+    proxy_set_header Authorization $backstage_authorization;
     proxy_read_timeout 120s;
     include /etc/nginx/snippets/security-headers.conf;
   }
