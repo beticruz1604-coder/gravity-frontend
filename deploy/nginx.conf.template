@@ -1,24 +1,73 @@
+# ── IP real del cliente ─────────────────────────────────────────────────────
+# Cloud Run añade la IP del cliente al FINAL de X-Forwarded-For; sin recursividad nginx toma justo esa (no la que el cliente
+# pueda haber escrito antes), y es la que usan los límites de abajo.
+set_real_ip_from 0.0.0.0/0;
+real_ip_header X-Forwarded-For;
+real_ip_recursive off;
+
+# ── Límites de peticiones por IP (frenan el abuso mientras el front siga público) ─
+limit_req_status 429;
+limit_req_zone $binary_remote_addr zone=lecturas:10m rate=60r/s;
+# Las escrituras (POST, etc.) tienen un límite propio mucho menor; las lecturas llevan clave vacía y no cuentan aquí.
+map $request_method $clave_escritura {
+  default "";
+  POST    $binary_remote_addr;
+  PUT     $binary_remote_addr;
+  PATCH   $binary_remote_addr;
+  DELETE  $binary_remote_addr;
+}
+limit_req_zone $clave_escritura zone=escrituras:10m rate=10r/s;
+
+# ── Lista de rutas de Backstage que el front necesita ──────────────────────
+# Todo lo demás recibe 403. Se evalúa sobre $uri (ya decodificado y normalizado: «..» y %2e%2e no pasan) y el método.
+# Para el registro de un componente por URL solo se permite la simulación (dryRun); registrarlo de verdad queda bloqueado
+# mientras no haya identidad por usuario.
+map "$request_method $uri $args" $ruta_permitida {
+  default 0;
+
+  ~^(GET|HEAD)\ /backstage/api/(catalog/entities|catalog/entities/by-name/[^/]+/[^/]+/[^/]+|scorecards/components|kubernetes/clusters|techdocs/metadata/entity/[^/]+/component/[^/]+)\ .*$ 1;
+  ~^(GET|HEAD)\ /backstage/api/homologation/(items|health|components|baseline)(/[^/]+)?\ .*$ 1;
+  ~^(GET|HEAD)\ /backstage/api/branching/(rules|health|pipelines/[^/]+|agent-pools/[^/]+|repositories/[^/]+/[^/]+|branches/[^/]+/[^/]+|policies/[^/]+/[^/]+)\ .*$ 1;
+  ~^(GET|HEAD)\ /backstage/api/scaffolder/v2/(tasks|tasks/[^/]+|tasks/[^/]+/events|templates/default/template/[^/]+/parameter-schema)\ .*$ 1;
+
+  ~^POST\ /backstage/api/scaffolder/v2/(tasks|tasks/[^/]+/cancel)\ .*$ 1;
+  ~^POST\ /backstage/api/branching/(preview|branch-name|validate)\ .*$ 1;
+  ~^POST\ /backstage/api/kubernetes/services/[^/]+\ .*$ 1;
+  ~^POST\ /backstage/api/catalog/locations\ dryRun=true$ 1;
+}
+
 server {
   listen 8080;
+  server_tokens off;
+  client_max_body_size 1m;
   root /usr/share/nginx/html;
   index index.html;
 
   # El navegador llama a /backstage/... y el servidor lo reenvía a Backstage por la red privada (mismo origen, sin CORS).
   location /backstage/ {
+    if ($ruta_permitida = 0) {
+      return 403;
+    }
+    limit_req zone=lecturas burst=120 nodelay;
+    limit_req zone=escrituras burst=20 nodelay;
+
     proxy_pass ${BACKSTAGE_URL}/;
     proxy_http_version 1.1;
     proxy_ssl_server_name on;
     proxy_set_header Host ${BACKSTAGE_HOST};
     proxy_read_timeout 120s;
+    include /etc/nginx/snippets/security-headers.conf;
   }
 
   location /assets/ {
     expires 1y;
     add_header Cache-Control "public, immutable";
+    include /etc/nginx/snippets/security-headers.conf;
   }
 
   location / {
     add_header Cache-Control "no-cache";
+    include /etc/nginx/snippets/security-headers.conf;
     try_files $uri /index.html;
   }
 }
