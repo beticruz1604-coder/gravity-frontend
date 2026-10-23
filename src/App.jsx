@@ -50,6 +50,7 @@ import {
 } from "./status";
 import { NavContext } from "./nav";
 import { NewVersionBanner } from "./version";
+import { initials, useIdentity } from "./identity";
 import {
   CatalogPage,
   EntityPage,
@@ -202,6 +203,7 @@ function normalizePipeline(item = {}) {
 /*SIDEBAR*/
 
 function Sidebar({ selectedPage, onNavigate }) {
+  const identity = useIdentity();
   return (
     <aside className="sidebar">
       <div className="logo">
@@ -235,11 +237,11 @@ function Sidebar({ selectedPage, onNavigate }) {
       </nav>
 
       <div className="user">
-        <div className="user-circle">U1</div>
+        <div className="user-circle">{identity ? initials(identity.name) : "U1"}</div>
 
-        <div className="user-data">
-          <div>Usuario 1</div>
-          <small>ADMIN</small>
+        <div className="user-data" title={identity?.email ?? ""}>
+          <div>{identity ? identity.name : "Usuario 1"}</div>
+          <small>{identity ? (identity.groups.map((g) => g.replace(/^group:default\//, "")).join(", ") || "SIN GRUPO") : "ADMIN"}</small>
         </div>
       </div>
     </aside>
