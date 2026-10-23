@@ -10,7 +10,8 @@ FROM nginx:1.27-alpine
 # nginx sustituye las variables de las plantillas al arrancar (solo las que están definidas como entorno).
 ENV BACKSTAGE_URL="" \
     BACKSTAGE_HOST="" \
-    NGINX_ENVSUBST_FILTER="^(BACKSTAGE_URL|BACKSTAGE_HOST)$"
+    BACKSTAGE_TOKEN="" \
+    NGINX_ENVSUBST_FILTER="^(BACKSTAGE_URL|BACKSTAGE_HOST|BACKSTAGE_TOKEN)$"
 COPY deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY deploy/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /app/dist /usr/share/nginx/html
