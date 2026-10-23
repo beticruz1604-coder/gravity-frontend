@@ -10,6 +10,94 @@
 export const BACKSTAGE_URL = import.meta.env.VITE_BACKSTAGE_URL ?? "/backstage";
 export const PROJECT = import.meta.env.VITE_AZDO_PROJECT ?? "demos";
 
+/*
+ * Identidad del usuario. Con el front detrás de Identity-Aware Proxy (IAP), el proxy de nginx reenvía a Backstage la cabecera
+ * firmada de IAP y Backstage la valida (proveedor gcpIap) y devuelve un token de ESE usuario; todas las llamadas lo llevan.
+ * Si no hay IAP (desarrollo, o antes de activarlo) esa ruta no responde y se trabaja de forma anónima, como hasta ahora.
+ */
+const IDENTITY_PROVIDER = "gcpIap";
+const TOKEN_MARGIN_MS = 2 * 60 * 1000;
+const ANONYMOUS_RETRY_MS = 5 * 60 * 1000;
+
+let session = null; // { token, expiresAt, profile, identity }
+let anonymousUntil = 0;
+let pendingSession = null;
+
+function tokenExpiry(token) {
+  try {
+    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(payload)).exp * 1000;
+  } catch {
+    return Date.now() + 10 * 60 * 1000;
+  }
+}
+
+async function loadSession() {
+  try {
+    const response = await fetch(`${BACKSTAGE_URL}/api/auth/${IDENTITY_PROVIDER}/refresh`, {
+      headers: { Accept: "application/json" }
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json();
+    const token = data?.backstageIdentity?.token;
+    if (!token) {
+      return null;
+    }
+    return {
+      token,
+      expiresAt: tokenExpiry(token),
+      profile: data.profile ?? {},
+      identity: data.backstageIdentity.identity ?? {}
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Token vigente del usuario (se renueva solo antes de caducar) o undefined si se trabaja sin identidad. */
+async function currentToken() {
+  if (session && session.expiresAt - Date.now() > TOKEN_MARGIN_MS) {
+    return session.token;
+  }
+  if (!session && Date.now() < anonymousUntil) {
+    return undefined;
+  }
+  pendingSession ??= loadSession().finally(() => {
+    pendingSession = null;
+  });
+  const fresh = await pendingSession;
+  if (fresh) {
+    session = fresh;
+    anonymousUntil = 0;
+  } else if (!session || session.expiresAt <= Date.now()) {
+    session = null;
+    anonymousUntil = Date.now() + ANONYMOUS_RETRY_MS;
+  }
+  return session?.token;
+}
+
+function forgetSession() {
+  session = null;
+  anonymousUntil = 0;
+}
+
+/** Quién está usando GRAVITY: { name, email, entityRef, groups } o null si no hay identidad (modo anónimo). */
+export async function whoAmI() {
+  await currentToken();
+  if (!session) {
+    return null;
+  }
+  const { profile, identity } = session;
+  return {
+    name: profile.displayName ?? profile.email ?? identity.userEntityRef,
+    email: profile.email ?? "",
+    entityRef: identity.userEntityRef ?? "",
+    groups: (identity.ownershipEntityRefs ?? []).filter((ref) => ref !== identity.userEntityRef)
+  };
+}
+
 export class ApiError extends Error {
   constructor(message, status) {
     super(message);
@@ -22,9 +110,17 @@ async function requestOnce(path, { method = "GET", body, timeout = 30000 } = {})
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
+    const token = await currentToken();
+    const headers = {};
+    if (body) {
+      headers["Content-Type"] = "application/json";
+    }
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
     const response = await fetch(`${BACKSTAGE_URL}${path}`, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal
     });
@@ -73,6 +169,11 @@ async function request(path, options = {}) {
   try {
     return await requestOnce(path, options);
   } catch (err) {
+    // 401: el token caducó o se revocó. No se ejecutó nada, así que es seguro renovarlo y repetir una vez (también escrituras).
+    if (err.status === 401 && session) {
+      forgetSession();
+      return requestOnce(path, options);
+    }
     const read = (options.method ?? "GET") === "GET";
     const transient = TRANSIENT.includes(err.status) || err.network;
     if (!read || !transient) {
