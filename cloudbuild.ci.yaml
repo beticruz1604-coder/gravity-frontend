@@ -1,0 +1,31 @@
+# CI del front (trigger de Cloud Build en cada pull request hacia main): dependencias, lint, compilación, prueba de humo en
+# navegador y pruebas del proxy de nginx (lista de rutas, límites y cabeceras de seguridad).
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1200s
+steps:
+  - id: instalar
+    name: node:22-bookworm-slim
+    entrypoint: npm
+    args: ["ci", "--no-audit", "--no-fund"]
+
+  - id: lint
+    name: node:22-bookworm-slim
+    entrypoint: npm
+    args: ["run", "lint"]
+
+  - id: compilar
+    name: node:22-bookworm-slim
+    entrypoint: npm
+    args: ["run", "build"]
+
+  - id: humo
+    name: mcr.microsoft.com/playwright:v1.49.0-noble
+    entrypoint: bash
+    args: ["-c", "npm i --no-save --no-audit --no-fund playwright@1.49.0 && node tests/smoke.mjs"]
+
+  - id: proxy
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args: ["tests/proxy-allowlist.sh"]
+    env: ["DOCKER_NETWORK=cloudbuild"]
