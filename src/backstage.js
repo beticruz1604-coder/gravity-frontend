@@ -246,6 +246,7 @@ export const homologation = {
   component: (name) => request(`/api/homologation/components/${enc(name)}`, { timeout: 60000 }),
   baselineOf: (name) => request(`/api/homologation/baseline/${enc(name)}`, { timeout: 60000 }),
   items: () => request("/api/homologation/items", { timeout: 60000 }),
+  requirements: () => request("/api/homologation/requirements", { timeout: 60000 }),
   components: () => request("/api/homologation/components", { timeout: 60000 }),
   baseline: () => request("/api/homologation/baseline", { timeout: 60000 }),
   health: () => request("/api/homologation/health")

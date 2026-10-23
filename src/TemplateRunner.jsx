@@ -174,6 +174,45 @@ function FieldShell({ definition, required, error, help, children }) {
   );
 }
 
+const refName = (ref) => String(ref ?? "").split("/").pop();
+const relatedTo = (entity, type) => (entity.relations ?? []).filter((r) => r.type === type).map((r) => refName(r.targetRef));
+
+/** Ficha del componente elegido: lo que el catálogo sabe de él, para confirmar que es el que se quiere antes de continuar. */
+function ComponentCard({ entity }) {
+  const { metadata, spec = {} } = entity;
+  const ann = metadata.annotations ?? {};
+  const rows = [
+    ["Propietario", relatedTo(entity, "ownedBy").join(", ") || refName(spec.owner)],
+    ["Sistema", refName(spec.system)],
+    ["Tipo / ciclo de vida", [spec.type, spec.lifecycle].filter(Boolean).join(" · ")],
+    ["Repositorio", ann["dev.azure.com/project-repo"]],
+    ["Pipeline", ann["dev.azure.com/build-definition"]],
+    ["Depende de", relatedTo(entity, "dependsOn").join(", ")],
+    ["Lo usan", relatedTo(entity, "dependencyOf").join(", ")],
+    ["APIs que ofrece", relatedTo(entity, "providesApi").join(", ")],
+    ["APIs que consume", relatedTo(entity, "consumesApi").join(", ")],
+  ].filter(([, v]) => v);
+  return (
+    <div className="preview-box" data-testid="component-card">
+      <strong>{metadata.title ?? metadata.name}</strong>
+      {metadata.description && <p>{metadata.description}</p>}
+      <dl className="component-card">
+        {rows.map(([label, value]) => (
+          <React.Fragment key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+      {(metadata.tags ?? []).length > 0 && (
+        <div className="chip-row">
+          {metadata.tags.map((tag) => <span className="chip" key={tag}>{tag}</span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ComponentField({ definition, required, value, onChange, error }) {
   const state = useAsync(() => catalog.components(), []);
   const items = (state.data ?? []).filter(isDeployable);
@@ -206,6 +245,9 @@ function ComponentField({ definition, required, value, onChange, error }) {
           </option>
         ))}
       </select>
+      {value && items.find((e) => e.metadata.name === value) && (
+        <ComponentCard entity={items.find((e) => e.metadata.name === value)} />
+      )}
     </FieldShell>
   );
 }
