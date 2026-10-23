@@ -65,8 +65,8 @@ async function requestOnce(path, { method = "GET", body, timeout = 30000 } = {})
   }
 }
 
-/** Estados que indican que el túnel hacia Backstage se cayó un momento (502/503/504 de nginx y 530 de Cloudflare). */
-const TRANSIENT = [502, 503, 504, 530];
+/** Estados que indican que Backstage no estaba disponible un momento, p. ej. al reiniciarse (502/503/504 de nginx). */
+const TRANSIENT = [502, 503, 504];
 
 /** Las lecturas se reintentan una vez ante una caída breve; las escrituras nunca, para no ejecutar algo dos veces. */
 async function request(path, options = {}) {
@@ -162,15 +162,6 @@ export const kubernetes = {
   services: (serviceId, entity) =>
     request(`/api/kubernetes/services/${enc(serviceId)}`, { method: "POST", body: { entity }, timeout: 60000 })
 };
-
-/** URL pública de la interfaz de Backstage, para los enlaces "Abrir en Backstage". */
-export const BACKSTAGE_UI_URL =
-  import.meta.env.VITE_BACKSTAGE_UI_URL ?? "https://backstage.backstage-lab.com";
-
-export function backstageEntityUrl(entity, path = "") {
-  const { kind, metadata } = entity;
-  return `${BACKSTAGE_UI_URL}/catalog/${metadata.namespace ?? "default"}/${kind.toLowerCase()}/${metadata.name}${path}`;
-}
 
 export function entityRef(entity) {
   return `${entity.kind.toLowerCase()}:${entity.metadata.namespace ?? "default"}/${entity.metadata.name}`;
