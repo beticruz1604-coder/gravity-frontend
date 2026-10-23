@@ -17,7 +17,6 @@ import {
   scorecards,
   techdocs,
   annotation,
-  backstageEntityUrl,
   entityRef,
   formatDate
 } from "./backstage";
@@ -544,7 +543,6 @@ function Overview({ entity, entities }) {
               <ExternalA href={annotation(entity, "backstage.io/view-url").replace(/\?path=.*/, "")}>Repositorio</ExternalA>
             )}
             {links.map((link) => <ExternalA key={link.url} href={link.url}>{link.title ?? link.url}</ExternalA>)}
-            <ExternalA href={backstageEntityUrl(entity)}>Abrir en Backstage</ExternalA>
           </div>
         </div>
       )}
@@ -825,9 +823,6 @@ function Docs({ entity }) {
       ) : (
         <Notice>Documentación disponible{state.data?.build_timestamp ? ` (generada ${formatDate(state.data.build_timestamp * 1000)})` : ""}.</Notice>
       )}
-      <div className="task-links">
-        <ExternalA href={backstageEntityUrl(entity).replace("/catalog/", "/docs/")}>Abrir documentación en Backstage</ExternalA>
-      </div>
     </>
   );
 }

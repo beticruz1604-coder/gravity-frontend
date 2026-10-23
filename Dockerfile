@@ -10,9 +10,7 @@ FROM nginx:1.27-alpine
 # nginx sustituye las variables de las plantillas al arrancar (solo las que están definidas como entorno).
 ENV BACKSTAGE_URL="" \
     BACKSTAGE_HOST="" \
-    CF_ACCESS_CLIENT_ID="" \
-    CF_ACCESS_CLIENT_SECRET="" \
-    NGINX_ENVSUBST_FILTER="^(BACKSTAGE_URL|BACKSTAGE_HOST|CF_ACCESS_CLIENT_ID|CF_ACCESS_CLIENT_SECRET)$"
+    NGINX_ENVSUBST_FILTER="^(BACKSTAGE_URL|BACKSTAGE_HOST)$"
 COPY deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080
