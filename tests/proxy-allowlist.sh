@@ -6,14 +6,14 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 NET=${DOCKER_NETWORK:-pxtest-net}
 docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
-cleanup() { docker rm -f pxtest-stub pxtest-front >/dev/null 2>&1; [ "$NET" = "pxtest-net" ] && docker network rm "$NET" >/dev/null 2>&1; true; }
+cleanup() { docker rm -f pxtest-stub pxtest-front pxtest-front-token >/dev/null 2>&1; [ "$NET" = "pxtest-net" ] && docker network rm "$NET" >/dev/null 2>&1; true; }
 trap cleanup EXIT
 
 docker build -q -t pxtest-front . >/dev/null || { echo "FALLO: no se pudo construir la imagen"; exit 1; }
 # El «Backstage» de mentira se construye como imagen (no se monta un archivo: en Cloud Build el demonio de Docker no ve el disco del paso).
 docker build -q -t pxtest-stub - >/dev/null <<'EOS'
 FROM nginx:1.27-alpine
-RUN printf 'server { listen 80; location / { default_type application/json; return 200 "{\\"ok\\":true}"; } }\n' > /etc/nginx/conf.d/default.conf
+RUN printf 'server { listen 80; location / { default_type application/json; return 200 "$http_authorization"; } }\n' > /etc/nginx/conf.d/default.conf
 EOS
 docker run -d --name pxtest-stub --network "$NET" pxtest-stub >/dev/null
 docker run -d --name pxtest-front --network "$NET" -e BACKSTAGE_URL=http://pxtest-stub -e BACKSTAGE_HOST=pxtest-stub pxtest-front >/dev/null
@@ -49,6 +49,15 @@ espera 403 POST "/backstage/api/catalog/locations?dryRun=false"
 espera 403 DELETE /backstage/api/catalog/entities/by-uid/x
 espera 403 PUT /backstage/api/scaffolder/v2/tasks
 espera 403 POST /backstage/api/scaffolder/v2/tasks/abc/events
+
+# Credencial hacia Backstage: con BACKSTAGE_TOKEN nginx envía su token y sustituye el del cliente; sin él deja pasar el del cliente.
+cuerpo() { docker run --rm --network "$NET" curlimages/curl:8.10.1 -s "$@"; }
+docker run -d --name pxtest-front-token --network "$NET" -e BACKSTAGE_URL=http://pxtest-stub -e BACKSTAGE_HOST=pxtest-stub -e BACKSTAGE_TOKEN=tokenservicio pxtest-front >/dev/null
+sleep 3
+[ "$(cuerpo http://pxtest-front-token:8080/backstage/api/branching/rules)" = "Bearer tokenservicio" ] || { echo "FALLO: con token configurado no se envía Authorization: Bearer <token>"; fallos=$((fallos + 1)); }
+[ "$(cuerpo -H 'Authorization: Bearer del-cliente' http://pxtest-front-token:8080/backstage/api/branching/rules)" = "Bearer tokenservicio" ] || { echo "FALLO: el token de servicio no sustituye al del cliente"; fallos=$((fallos + 1)); }
+[ "$(cuerpo -H 'Authorization: Bearer del-cliente' http://pxtest-front:8080/backstage/api/branching/rules)" = "Bearer del-cliente" ] || { echo "FALLO: sin token configurado no se deja pasar el del cliente"; fallos=$((fallos + 1)); }
+docker rm -f pxtest-front-token >/dev/null 2>&1
 
 # Cabeceras de seguridad en una ruta de cada tipo.
 for p in / /assets/x.js /backstage/api/branching/rules /backstage/api/auth/x; do
