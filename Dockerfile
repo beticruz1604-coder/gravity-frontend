@@ -15,6 +15,8 @@ ENV BACKSTAGE_URL="" \
 COPY deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY deploy/security-headers.conf /etc/nginx/snippets/security-headers.conf
 # Se ejecuta antes que el envsubst de las plantillas (20-): prepara la verificación TLS hacia Backstage.
-COPY --chmod=0755 deploy/15-backstage-tls.sh /docker-entrypoint.d/15-backstage-tls.sh
+COPY deploy/15-backstage-tls.sh /docker-entrypoint.d/15-backstage-tls.sh
+# (sin COPY --chmod: el Docker de Cloud Build no tiene BuildKit)
+RUN chmod 0755 /docker-entrypoint.d/15-backstage-tls.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080
