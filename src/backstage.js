@@ -252,11 +252,18 @@ export const homologation = {
   health: () => request("/api/homologation/health")
 };
 
-/* TechDocs y Kubernetes: solo consulta de disponibilidad; el contenido se abre en Backstage. */
+/* TechDocs: la documentación la genera y publica la VM de Backstage (GCS); aquí se consulta si existe y se lee su contenido. */
 
 export const techdocs = {
+  /** Datos de la documentación publicada (404 si aún no se ha publicado). */
   metadata: (namespace, name) =>
-    request(`/api/techdocs/metadata/entity/${enc(namespace)}/component/${enc(name)}`)
+    request(`/api/techdocs/metadata/techdocs/${enc(namespace)}/component/${enc(name)}`),
+  /** Base (ruta absoluta del proxy) de los archivos estáticos de la documentación de un componente. */
+  staticBase: (namespace, name) =>
+    `/backstage/api/techdocs/static/docs/${enc(namespace)}/component/${enc(name)}/`,
+  /** HTML de una página (Backstage lo entrega como text/plain a propósito: hay que sanearlo antes de mostrarlo). */
+  page: (namespace, name, path = "") =>
+    request(`/api/techdocs/static/docs/${enc(namespace)}/component/${enc(name)}/${path}index.html`)
 };
 
 export const kubernetes = {
