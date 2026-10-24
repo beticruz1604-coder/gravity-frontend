@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 NET=${DOCKER_NETWORK:-pxtest-net}
 docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
-cleanup() { docker rm -f pxtest-stub pxtest-front pxtest-front-token >/dev/null 2>&1; [ "$NET" = "pxtest-net" ] && docker network rm "$NET" >/dev/null 2>&1; true; }
+cleanup() { docker rm -f pxtest-stub pxtest-front pxtest-front-token pxtest-stub-tls pxtest-front-tls pxtest-front-tls-bad pxtest-front-tls-noca >/dev/null 2>&1; docker volume rm -f pxtest-certs pxtest-certs-bad >/dev/null 2>&1; [ "$NET" = "pxtest-net" ] && docker network rm "$NET" >/dev/null 2>&1; true; }
 trap cleanup EXIT
 
 docker build -q -t pxtest-front . >/dev/null || { echo "FALLO: no se pudo construir la imagen"; exit 1; }
@@ -46,6 +46,12 @@ for p in /backstage/api/auth/guest/refresh /backstage/api/catalog/refresh /backs
 done
 espera 200 POST /backstage/api/catalog/locations
 espera 200 POST "/backstage/api/catalog/locations?dryRun=true"
+espera 200 GET /backstage/api/techdocs/metadata/techdocs/default/component/react-app
+espera 200 GET /backstage/api/techdocs/static/docs/default/component/react-app/despliegue/index.html
+espera 403 GET "/backstage/api/techdocs/static/docs/default/component/react-app/../../../catalog/entities"
+espera 403 GET /backstage/api/techdocs/static/docs/default/kind/react-app/index.html
+espera 403 GET /backstage/api/techdocs/sync/default/component/react-app
+espera 403 POST /backstage/api/techdocs/static/docs/default/component/react-app/index.html
 espera 403 POST "/backstage/api/catalog/locations?dryRun=false"
 espera 403 POST "/backstage/api/catalog/locations?x=1"
 espera 403 DELETE /backstage/api/catalog/locations/abc
@@ -61,6 +67,27 @@ sleep 3
 [ "$(cuerpo -H 'Authorization: Bearer del-cliente' http://pxtest-front-token:8080/backstage/api/branching/rules)" = "Bearer tokenservicio" ] || { echo "FALLO: el token de servicio no sustituye al del cliente"; fallos=$((fallos + 1)); }
 [ "$(cuerpo -H 'Authorization: Bearer del-cliente' http://pxtest-front:8080/backstage/api/branching/rules)" = "Bearer del-cliente" ] || { echo "FALLO: sin token configurado no se deja pasar el del cliente"; fallos=$((fallos + 1)); }
 docker rm -f pxtest-front-token >/dev/null 2>&1
+
+# TLS hacia Backstage: con la CA correcta pasa; con otra CA (o sin CA) no se habla con el servidor y el contenedor ni arranca sin ella.
+mkcerts() { # mkcerts <volumen>: CA propia y certificado de servidor (backstage.internal) firmado por ella
+  docker volume create "$1" >/dev/null
+  docker run --rm -v "$1":/c -w /c --entrypoint sh alpine/openssl -c '
+    openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -days 2 -subj "/CN=pxtest-ca" 2>/dev/null &&
+    openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=backstage.internal" 2>/dev/null &&
+    printf "subjectAltName=DNS:backstage.internal" > ext.cnf &&
+    openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out server.pem -days 2 -extfile ext.cnf 2>/dev/null &&
+    chmod 644 *.pem *.key' >/dev/null 2>&1
+}
+mkcerts pxtest-certs; mkcerts pxtest-certs-bad
+docker run -d --name pxtest-stub-tls --network "$NET" --network-alias backstage-tls -v pxtest-certs:/c:ro --entrypoint sh nginx:1.27-alpine -c '
+  printf "server { listen 443 ssl; ssl_certificate /c/server.pem; ssl_certificate_key /c/server.key; location / { default_type application/json; return 200 \"tls-ok\"; } }\n" > /etc/nginx/conf.d/default.conf && exec nginx -g "daemon off;"' >/dev/null
+docker run -d --name pxtest-front-tls --network "$NET" -v pxtest-certs:/etc/backstage-ca:ro -e BACKSTAGE_URL=https://backstage-tls -e BACKSTAGE_HOST=backstage-tls pxtest-front >/dev/null
+docker run -d --name pxtest-front-tls-bad --network "$NET" -v pxtest-certs-bad:/etc/backstage-ca:ro -e BACKSTAGE_URL=https://backstage-tls -e BACKSTAGE_HOST=backstage-tls pxtest-front >/dev/null
+docker run -d --name pxtest-front-tls-noca --network "$NET" -e BACKSTAGE_URL=https://backstage-tls -e BACKSTAGE_HOST=backstage-tls pxtest-front >/dev/null
+sleep 5
+[ "$(cuerpo http://pxtest-front-tls:8080/backstage/api/branching/rules)" = "tls-ok" ] || { echo "FALLO: con la CA correcta no se llega a Backstage por TLS"; fallos=$((fallos + 1)); }
+[ "$(docker run --rm --network "$NET" curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' http://pxtest-front-tls-bad:8080/backstage/api/branching/rules)" = "502" ] || { echo "FALLO: con una CA distinta debería dar 502"; fallos=$((fallos + 1)); }
+[ "$(docker inspect -f '{{.State.Running}}' pxtest-front-tls-noca 2>/dev/null)" = "false" ] || { echo "FALLO: con https y sin CA el contenedor no debería arrancar"; fallos=$((fallos + 1)); }
 
 # Cabeceras de seguridad en una ruta de cada tipo.
 for p in / /assets/x.js /backstage/api/branching/rules /backstage/api/auth/x; do

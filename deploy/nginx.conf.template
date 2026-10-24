@@ -33,7 +33,7 @@ map "${BACKSTAGE_TOKEN}" $backstage_authorization {
 map "$request_method $uri $args" $ruta_permitida {
   default 0;
 
-  ~^(GET|HEAD)\ /backstage/api/(catalog/entities|catalog/entities/by-name/[^/]+/[^/]+/[^/]+|scorecards/components|kubernetes/clusters|techdocs/metadata/entity/[^/]+/component/[^/]+)\ .*$ 1;
+  ~^(GET|HEAD)\ /backstage/api/(catalog/entities|catalog/entities/by-name/[^/]+/[^/]+/[^/]+|scorecards/components|kubernetes/clusters|techdocs/metadata/techdocs/[^/]+/component/[^/]+|techdocs/static/docs/[^/]+/component/[^/]+/(?!.*\.\.)[A-Za-z0-9._/-]*)\ .*$ 1;
   ~^(GET|HEAD)\ /backstage/api/homologation/(items|health|components|baseline|requirements)(/[^/]+)?\ .*$ 1;
   ~^(GET|HEAD)\ /backstage/api/branching/(rules|health|pipelines/[^/]+|agent-pools/[^/]+|repositories/[^/]+/[^/]+|branches/[^/]+/[^/]+|policies/[^/]+/[^/]+)\ .*$ 1;
   ~^(GET|HEAD)\ /backstage/api/scaffolder/v2/(tasks|tasks/[^/]+|tasks/[^/]+/events|templates/default/template/[^/]+/parameter-schema)\ .*$ 1;
@@ -62,6 +62,7 @@ server {
     proxy_pass ${BACKSTAGE_URL}/;
     proxy_http_version 1.1;
     proxy_ssl_server_name on;
+    include /etc/nginx/snippets/backstage-tls.conf;
     proxy_set_header Host ${BACKSTAGE_HOST};
     proxy_set_header Authorization $backstage_authorization;
     proxy_read_timeout 120s;
