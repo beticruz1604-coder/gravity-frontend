@@ -44,8 +44,11 @@ for p in /backstage/api/auth/guest/refresh /backstage/api/catalog/refresh /backs
          /backstage/api/catalog/entities/../../auth/x "/backstage/api/catalog/entities/%2e%2e/%2e%2e/auth/x" "/backstage/api/catalog/entities/..%2f..%2fauth/x" /backstage//api/auth/x; do
   espera 403 GET "$p"
 done
-espera 403 POST /backstage/api/catalog/locations
+espera 200 POST /backstage/api/catalog/locations
+espera 200 POST "/backstage/api/catalog/locations?dryRun=true"
 espera 403 POST "/backstage/api/catalog/locations?dryRun=false"
+espera 403 POST "/backstage/api/catalog/locations?x=1"
+espera 403 DELETE /backstage/api/catalog/locations/abc
 espera 403 DELETE /backstage/api/catalog/entities/by-uid/x
 espera 403 PUT /backstage/api/scaffolder/v2/tasks
 espera 403 POST /backstage/api/scaffolder/v2/tasks/abc/events
