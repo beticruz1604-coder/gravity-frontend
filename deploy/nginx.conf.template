@@ -62,6 +62,7 @@ server {
     proxy_pass ${BACKSTAGE_URL}/;
     proxy_http_version 1.1;
     proxy_ssl_server_name on;
+    include /etc/nginx/snippets/backstage-tls.conf;
     proxy_set_header Host ${BACKSTAGE_HOST};
     proxy_set_header Authorization $backstage_authorization;
     proxy_read_timeout 120s;
