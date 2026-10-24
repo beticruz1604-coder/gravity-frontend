@@ -1,5 +1,6 @@
 import React from "react";
 import { dump, load } from "js-yaml";
+import DOMPurify from "dompurify";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -806,6 +807,92 @@ function Apis({ entity, entities }) {
 
 /* ------------------------------------------------- TechDocs y Kubernetes */
 
+/** Convierte una página generada por MkDocs en contenido seguro: solo el artículo, sin scripts, con enlaces e imágenes reescritos. */
+function parseDocPage(html, base, currentPath) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const article = doc.querySelector("article");
+  const nav = [];
+  const seen = new Set();
+  doc.querySelectorAll("nav.md-nav--primary a.md-nav__link").forEach((a) => {
+    const href = a.getAttribute("href") ?? "";
+    if (!href || href.startsWith("#") || /^[a-z]+:/i.test(href) || seen.has(href)) return;
+    seen.add(href);
+    nav.push({ title: a.textContent.trim(), path: resolveDocPath(currentPath, href) });
+  });
+  const clean = DOMPurify.sanitize(article ? article.innerHTML : "", {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ["style", "form", "input", "button", "iframe", "object", "embed"],
+    FORBID_ATTR: ["style"]
+  });
+  // Documento inerte: un <div> desacoplado ya empezaría a descargar las imágenes (también las externas que se quitan abajo).
+  const holder = new DOMParser().parseFromString(`<body>${clean}</body>`, "text/html").body;
+  holder.querySelectorAll("img").forEach((img) => {
+    const src = img.getAttribute("src") ?? "";
+    if (/^[a-z]+:|^\/\//i.test(src)) img.remove();
+    else img.setAttribute("src", base + resolveDocPath(currentPath, src));
+  });
+  holder.querySelectorAll("a[href]").forEach((a) => {
+    const href = a.getAttribute("href");
+    if (href.startsWith("#")) return;
+    if (/^https?:/i.test(href)) {
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener noreferrer");
+    } else if (!/^[a-z]+:/i.test(href)) {
+      a.setAttribute("data-doc-path", resolveDocPath(currentPath, href.split("#")[0]));
+      a.setAttribute("href", "#");
+    } else {
+      a.removeAttribute("href");
+    }
+  });
+  return { html: holder.innerHTML, nav };
+}
+
+/** Resuelve un enlace relativo de MkDocs ("../despliegue/", "despliegue/") contra la página actual; devuelve una ruta tipo "despliegue/". */
+function resolveDocPath(currentPath, href) {
+  const parts = currentPath.split("/").filter(Boolean);
+  for (const seg of href.split("#")[0].split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") parts.pop();
+    else if (/\.html?$/i.test(seg)) { if (seg !== "index.html") parts.push(seg.replace(/\.html?$/i, "")); }
+    else parts.push(seg);
+  }
+  return parts.length ? `${parts.join("/")}/` : "";
+}
+
+function DocsViewer({ namespace, name }) {
+  const [path, setPath] = React.useState("");
+  const base = techdocs.staticBase(namespace, name);
+  const page = useAsync(() => techdocs.page(namespace, name, path), [namespace, name, path]);
+  const parsed = React.useMemo(
+    () => (typeof page.data === "string" ? parseDocPage(page.data, base, path) : null),
+    [page.data, base, path]
+  );
+  const onClick = (event) => {
+    const link = event.target.closest?.("a[data-doc-path]");
+    if (!link) return;
+    event.preventDefault();
+    setPath(link.getAttribute("data-doc-path"));
+  };
+
+  if (page.loading && !parsed) return <Loading />;
+  if (page.error) return <Notice>No se pudo leer esta página de la documentación ({String(page.error.message ?? page.error)}).</Notice>;
+  if (!parsed) return null;
+  return (
+    <div className="techdocs">
+      {parsed.nav.length > 1 && (
+        <nav className="techdocs-nav" aria-label="Páginas de la documentación">
+          {parsed.nav.map((item) => (
+            <button key={item.path || "inicio"} className={item.path === path ? "selected" : ""} onClick={() => setPath(item.path)}>
+              {item.title}
+            </button>
+          ))}
+        </nav>
+      )}
+      <div className="techdocs-content" onClick={onClick} dangerouslySetInnerHTML={{ __html: parsed.html }} />
+    </div>
+  );
+}
+
 function Docs({ entity }) {
   const ref = annotation(entity, "backstage.io/techdocs-ref");
   const state = useAsync(
@@ -819,9 +906,12 @@ function Docs({ entity }) {
   return (
     <>
       {state.error ? (
-        <Notice>La documentación está configurada pero aún no se ha generado en Backstage. Se genera la primera vez que alguien la abre allí.</Notice>
+        <Notice>La documentación está configurada pero aún no se ha publicado. Se genera y publica cada hora desde el repositorio del componente (debe tener mkdocs.yml).</Notice>
       ) : (
-        <Notice>Documentación disponible{state.data?.build_timestamp ? ` (generada ${formatDate(state.data.build_timestamp * 1000)})` : ""}.</Notice>
+        <>
+          <Notice>Documentación publicada{state.data?.build_timestamp ? ` (generada ${formatDate(state.data.build_timestamp)})` : ""}.</Notice>
+          <DocsViewer namespace={entity.metadata.namespace ?? "default"} name={entity.metadata.name} />
+        </>
       )}
     </>
   );
