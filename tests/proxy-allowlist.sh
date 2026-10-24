@@ -45,6 +45,12 @@ for p in /backstage/api/auth/guest/refresh /backstage/api/catalog/refresh /backs
   espera 403 GET "$p"
 done
 espera 403 POST /backstage/api/catalog/locations
+espera 200 GET /backstage/api/techdocs/metadata/techdocs/default/component/react-app
+espera 200 GET /backstage/api/techdocs/static/docs/default/component/react-app/despliegue/index.html
+espera 403 GET "/backstage/api/techdocs/static/docs/default/component/react-app/../../../catalog/entities"
+espera 403 GET /backstage/api/techdocs/static/docs/default/kind/react-app/index.html
+espera 403 GET /backstage/api/techdocs/sync/default/component/react-app
+espera 403 POST /backstage/api/techdocs/static/docs/default/component/react-app/index.html
 espera 403 POST "/backstage/api/catalog/locations?dryRun=false"
 espera 403 DELETE /backstage/api/catalog/entities/by-uid/x
 espera 403 PUT /backstage/api/scaffolder/v2/tasks
