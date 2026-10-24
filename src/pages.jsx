@@ -171,7 +171,23 @@ function List({ items }) {
 /** Qué se exige para estar homologado, leído de la configuración que de verdad aplica Backstage. */
 function RequirementsPanel({ tab }) {
   const loader = useData(() => homologation.requirements(), { interval: 300000 });
-  const r = loader.data;
+  // La respuesta puede llegar incompleta (backend antiguo, error, objeto vacío): se normaliza para que el panel nunca rompa la pantalla.
+  const raw = loader.data;
+  const r = raw && typeof raw === "object" && raw.infrastructure && raw.components
+    ? {
+        infrastructure: {
+          environments: raw.infrastructure.environments ?? [],
+          optionalEnvironments: raw.infrastructure.optionalEnvironments ?? [],
+          perResource: raw.infrastructure.perResource ?? [],
+          betweenEnvironments: raw.infrastructure.betweenEnvironments ?? []
+        },
+        components: {
+          environments: raw.components.environments ?? [],
+          deployment: raw.components.deployment ?? [],
+          technologies: raw.components.technologies ?? []
+        }
+      }
+    : null;
   return (
     <details className="requirements-panel">
       <summary>Requisitos para estar homologado ({tab === "infraestructura" ? "infraestructura" : "componentes"})</summary>
