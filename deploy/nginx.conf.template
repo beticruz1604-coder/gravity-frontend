@@ -41,7 +41,7 @@ map "$request_method $uri $args" $ruta_permitida {
   ~^POST\ /backstage/api/scaffolder/v2/(tasks|tasks/[^/]+/cancel)\ .*$ 1;
   ~^POST\ /backstage/api/branching/(preview|branch-name|validate)\ .*$ 1;
   ~^POST\ /backstage/api/kubernetes/services/[^/]+\ .*$ 1;
-  ~^POST\ /backstage/api/catalog/locations\ dryRun=true$ 1;
+  ~^POST\ /backstage/api/catalog/locations\ (dryRun=true)?$ 1;
 }
 
 server {
