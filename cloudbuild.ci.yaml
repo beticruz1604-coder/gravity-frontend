@@ -22,7 +22,7 @@ steps:
   - id: humo
     name: mcr.microsoft.com/playwright:v1.49.0-noble
     entrypoint: bash
-    args: ["-c", "npm i --no-save --no-audit --no-fund playwright@1.49.0 && node tests/smoke.mjs"]
+    args: ["-c", "npm i --no-save --no-audit --no-fund playwright@1.49.0 && { node tests/smoke.mjs; a=$$?; node tests/docs-viewer.mjs; b=$$?; [ $$a -eq 0 ] && [ $$b -eq 0 ]; }"]
 
   - id: proxy
     name: gcr.io/cloud-builders/docker
