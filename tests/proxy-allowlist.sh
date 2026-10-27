@@ -89,6 +89,9 @@ sleep 5
 [ "$(docker run --rm --network "$NET" curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' http://pxtest-front-tls-bad:8080/backstage/api/branching/rules)" = "502" ] || { echo "FALLO: con una CA distinta debería dar 502"; fallos=$((fallos + 1)); }
 [ "$(docker inspect -f '{{.State.Running}}' pxtest-front-tls-noca 2>/dev/null)" = "false" ] || { echo "FALLO: con https y sin CA el contenedor no debería arrancar"; fallos=$((fallos + 1)); }
 
+# Con Backstage apagado el proxy debe fallar rápido (Cloud Run factura el CPU mientras espera una conexión que no llega).
+docker exec pxtest-front nginx -T 2>/dev/null | grep -q '^ *proxy_connect_timeout 3s;' || { echo "FALLO: falta proxy_connect_timeout 3s en el proxy hacia Backstage"; fallos=$((fallos + 1)); }
+
 # Cabeceras de seguridad en una ruta de cada tipo.
 for p in / /assets/x.js /backstage/api/branching/rules /backstage/api/auth/x; do
   n="$(docker run --rm --network "$NET" curlimages/curl:8.10.1 -s -D - -o /dev/null "http://pxtest-front:8080$p" | tr -d '\r' | grep -ciE '^(x-content-type-options|x-frame-options|referrer-policy|permissions-policy|strict-transport-security|content-security-policy):')"
