@@ -175,6 +175,7 @@ function RequirementsPanel({ tab }) {
   const raw = loader.data;
   const r = raw && typeof raw === "object" && raw.infrastructure && raw.components
     ? {
+        governance: raw.governance && typeof raw.governance === "object" ? raw.governance : null,
         infrastructure: {
           environments: raw.infrastructure.environments ?? [],
           optionalEnvironments: raw.infrastructure.optionalEnvironments ?? [],
@@ -203,9 +204,10 @@ function RequirementsPanel({ tab }) {
           <p>
             Los ambientes se comparan en este orden: {r.infrastructure.environments.join(" → ") || "—"}
             {r.infrastructure.optionalEnvironments.length > 0 && ` (opcionales mientras no existan: ${r.infrastructure.optionalEnvironments.join(", ")})`}.
-            Un recurso queda homologado cuando es igual en todos los ambientes existentes:
+            Cada grupo se compara con su propia regla:
           </p>
-          <List items={r.infrastructure.betweenEnvironments.map((g) => `${g.title}: debe tener ${g.compares} igual en todos los ambientes.`)} />
+          <List items={r.infrastructure.betweenEnvironments.map((g) => `${g.title}: ${g.rule ?? `debe tener ${g.compares} igual en todos los ambientes.`}`)} />
+          {r.governance && <p><small>Reglas: {r.governance.detail}</small></p>}
         </>
       )}
       {r && tab !== "infraestructura" && (
