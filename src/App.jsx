@@ -50,7 +50,8 @@ import {
 } from "./status";
 import { NavContext } from "./nav";
 import { NewVersionBanner } from "./version";
-import { initials, useIdentity } from "./identity";
+import { initials, useAccess, useIdentity } from "./identity";
+import { INTERACTIVE_SIGN_IN } from "./backstage";
 import {
   CatalogPage,
   EntityPage,
@@ -58,6 +59,7 @@ import {
 } from "./catalog";
 import {
   HomologationPage,
+  UsersPage,
   RepositoriesPage,
   PipelinesPage,
   ReleasesPage,
@@ -86,7 +88,8 @@ const menuItems = [
   { name: "Tools Health", icon: Wrench },
   { name: "Log Analyzer", icon: FileSearch },
   { name: "Homologation Status", icon: CheckCircle },
-  { name: "Pipeline Engine (IDP)", icon: GitPullRequest }
+  { name: "Pipeline Engine (IDP)", icon: GitPullRequest },
+  { name: "Usuarios", icon: Users }
 ];
 
 /* NORMALIZADORES
@@ -202,8 +205,9 @@ function normalizePipeline(item = {}) {
 
 /*SIDEBAR*/
 
-function Sidebar({ selectedPage, onNavigate }) {
-  const identity = useIdentity();
+function Sidebar({ selectedPage, onNavigate, access, onLogin }) {
+  const identity = useIdentity(access.authenticated);
+  const visible = menuItems.filter((item) => access.sections.includes(item.name));
   return (
     <aside className="sidebar">
       <div className="logo">
@@ -212,7 +216,7 @@ function Sidebar({ selectedPage, onNavigate }) {
       </div>
 
       <nav className="menu">
-        {menuItems.map((item) => {
+        {visible.map((item) => {
           const Icon = item.icon;
           const isActive = selectedPage === item.name;
 
@@ -241,10 +245,70 @@ function Sidebar({ selectedPage, onNavigate }) {
 
         <div className="user-data" title={identity?.email ?? ""}>
           <div>{identity ? identity.name : "Usuario 1"}</div>
-          <small>{identity ? (identity.groups.map((g) => g.replace(/^group:default\//, "")).join(", ") || "SIN GRUPO") : "ADMIN"}</small>
+          <small>{access.roles.length ? access.roles.map((r) => r.name).join(", ") : identity ? (identity.groups.map((g) => g.replace(/^group:default\//, "")).join(", ") || "SIN ROL") : "SIN SESIÓN"}</small>
         </div>
+        {INTERACTIVE_SIGN_IN && (
+          <button
+            type="button"
+            className="menu-item"
+            onClick={access.authenticated ? access.signOut : onLogin}
+          >
+            <span>{access.authenticated ? "Cerrar sesión" : "Iniciar sesión"}</span>
+          </button>
+        )}
       </div>
     </aside>
+  );
+}
+
+/** Pantalla de entrada: se muestra cuando la persona no tiene ninguna sección disponible. */
+function AccessGate({ access }) {
+  const [error, setError] = React.useState(null);
+  const [username, setUsername] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const login = (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    access
+      .signIn(username.trim(), password)
+      .catch((err) => setError(err.message))
+      .finally(() => setBusy(false));
+  };
+  let title = "Inicia sesión para entrar a GRAVITY";
+  let text = "Tu rol decide qué secciones puedes ver.";
+  if (access.error) {
+    title = "No se pudo comprobar tu acceso";
+    text = access.error;
+  } else if (access.authenticated) {
+    title = "Tu cuenta no tiene un rol asignado";
+    text = "Pide a un administrador que te agregue al grupo de tu rol (Ingeniero SCM, Ingeniero SRE, Ingeniero DevSecOps o Admin).";
+  }
+  return (
+    <section className="module-page">
+      <div className="module-panel panel-spaced access-gate">
+        <div className="panel-title"><strong>{title}</strong></div>
+        <p>{text}</p>
+        {!access.authenticated && INTERACTIVE_SIGN_IN && (
+          <form className="login-form" onSubmit={login}>
+            <label>
+              Usuario
+              <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required />
+            </label>
+            <label>
+              Contraseña
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+            </label>
+            {error && <p role="alert">{error}</p>}
+            <button type="submit" className="primary-button" disabled={busy}>{busy ? "Entrando…" : "Iniciar sesión"}</button>
+          </form>
+        )}
+        {access.authenticated && (
+          <button type="button" className="primary-button" onClick={access.signOut}>Cerrar sesión</button>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -2086,15 +2150,31 @@ function PlaceholderPage({ title }) {
 /*APP*/
 
 function App() {
+  const access = useAccess();
   const [
-    selectedPage,
+    requestedPage,
     setSelectedPage
   ] = React.useState(
     "Resumen"
   );
+  // Solo se muestra una sección que el rol permite; si la pedida no está, la primera disponible.
+  const selectedPage = access.sections.includes(requestedPage)
+    ? requestedPage
+    : (access.sections[0] ?? requestedPage);
 
   const [entityRef, setEntityRef] =
     React.useState(null);
+
+  // Con el acceso sin sesión abierto (modo de migración) el menú se ve igual; «Iniciar sesión» abre el formulario.
+  const [loginOpen, setLoginOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (access.authenticated) {
+      setLoginOpen(false);
+    }
+  }, [access.authenticated]);
+  const needsLogin = !access.authenticated && loginOpen;
+  const blocked = access.loading || access.sections.length === 0 || needsLogin;
+  const showPages = !entityRef && !blocked;
 
   const navigate = React.useCallback(
     (page) => {
@@ -2123,6 +2203,8 @@ function App() {
             : selectedPage
         }
         onNavigate={navigate}
+        access={access}
+        onLogin={() => setLoginOpen(true)}
       />
 
       <main className="main">
@@ -2176,7 +2258,9 @@ function App() {
         </header>
 
         <div className="dashboard-content">
-          {entityRef && (
+          {access.loading ? null : blocked ? <AccessGate access={access} /> : null}
+
+          {entityRef && !blocked && (
             <EntityPage
               reference={entityRef}
               onBack={() =>
@@ -2185,59 +2269,63 @@ function App() {
             />
           )}
 
-          {!entityRef && selectedPage ===
+          {showPages && selectedPage ===
             "Catálogo" && (
             <CatalogPage />
           )}
 
-          {!entityRef && selectedPage === "Resumen" && (
+          {showPages && selectedPage === "Resumen" && (
             <SummaryPage
               onNavigate={setSelectedPage}
             />
           )}
 
-          {!entityRef && selectedPage === "Repositories" && (
+          {showPages && selectedPage === "Repositories" && (
             <RepositoriesPage />
           )}
 
-          {!entityRef && selectedPage === "Pipelines" && (
+          {showPages && selectedPage === "Pipelines" && (
             <PipelinesPage />
           )}
 
-          {!entityRef && selectedPage === "Releases" && (
+          {showPages && selectedPage === "Releases" && (
             <ReleasesPage />
           )}
 
-          {!entityRef && selectedPage === "TechDebt" && (
+          {showPages && selectedPage === "TechDebt" && (
             <TechDebtPage />
           )}
 
-          {!entityRef && selectedPage ===
+          {showPages && selectedPage ===
             "Pool de Agentes" && (
             <AgentPoolsPage />
           )}
 
-          {!entityRef && selectedPage ===
+          {showPages && selectedPage ===
             "Compliance IQ" && (
             <ComplianceIqPage />
           )}
 
-          {!entityRef && selectedPage ===
+          {showPages && selectedPage ===
             "Tools Health" && (
             <ToolsHealthPage />
           )}
 
-          {!entityRef && selectedPage ===
+          {showPages && selectedPage ===
             "Homologation Status" && (
             <HomologationPage />
           )}
 
-          {!entityRef && selectedPage ===
+          {showPages && selectedPage ===
             "Pipeline Engine (IDP)" && (
             <PipelineEnginePage />
           )}
 
-          {!entityRef && ![
+          {showPages && selectedPage === "Usuarios" && access.admin && (
+            <UsersPage />
+          )}
+
+          {showPages && ![
             "Resumen",
             "Catálogo",
             "Repositories",
@@ -2248,7 +2336,8 @@ function App() {
             "Compliance IQ",
             "Tools Health",
             "Homologation Status",
-            "Pipeline Engine (IDP)"
+            "Pipeline Engine (IDP)",
+            "Usuarios"
           ].includes(
             selectedPage
           ) && (

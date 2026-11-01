@@ -29,7 +29,7 @@ espera() { # espera <código> <método> <ruta>
   if [ "$got" != "$1" ]; then echo "FALLO: $2 $3 -> $got (se esperaba $1)"; fallos=$((fallos + 1)); fi
 }
 for p in /backstage/api/catalog/entities "/backstage/api/catalog/entities?filter=kind=component" /backstage/api/catalog/entities/by-name/component/default/x \
-         /backstage/api/branching/rules /backstage/api/branching/pipelines/demos /backstage/api/branching/branches/demos/x /backstage/api/homologation/items /backstage/api/homologation/requirements \
+         /backstage/api/access/me /backstage/api/access/roles /backstage/api/access/users /backstage/api/auth/lab/refresh /backstage/api/branching/rules /backstage/api/branching/pipelines/demos /backstage/api/branching/branches/demos/x /backstage/api/homologation/items /backstage/api/homologation/requirements \
          /backstage/api/homologation/components/x /backstage/api/scaffolder/v2/tasks /backstage/api/scaffolder/v2/tasks/abc/events \
          /backstage/api/scaffolder/v2/templates/default/template/crear-rama/parameter-schema /backstage/api/kubernetes/clusters /backstage/api/scorecards/components; do
   espera 200 GET "$p"
@@ -39,7 +39,7 @@ for p in /backstage/api/scaffolder/v2/tasks /backstage/api/scaffolder/v2/tasks/a
   espera 200 POST "$p"
 done
 espera 200 GET /
-for p in /backstage/api/auth/guest/refresh /backstage/api/catalog/refresh /backstage/api/permission/authorize /backstage/api/proxy/x /backstage/api/search/query \
+for p in /backstage/api/auth/guest/refresh /backstage/api/auth/gcpIap/refresh /backstage/api/auth/github/start /backstage/api/auth/lab/other /backstage/api/auth/lab/logout /backstage/api/access/other /backstage/api/catalog/refresh /backstage/api/permission/authorize /backstage/api/proxy/x /backstage/api/search/query \
          /backstage/api/notifications /backstage/.backstage/health/v1/readiness /backstage/api/mcp-actions/v1 \
          /backstage/api/catalog/entities/../../auth/x "/backstage/api/catalog/entities/%2e%2e/%2e%2e/auth/x" "/backstage/api/catalog/entities/..%2f..%2fauth/x" /backstage//api/auth/x; do
   espera 403 GET "$p"
@@ -59,12 +59,13 @@ espera 403 DELETE /backstage/api/catalog/entities/by-uid/x
 espera 403 PUT /backstage/api/scaffolder/v2/tasks
 espera 403 POST /backstage/api/scaffolder/v2/tasks/abc/events
 
-# Credencial hacia Backstage: con BACKSTAGE_TOKEN nginx envía su token y sustituye el del cliente; sin él deja pasar el del cliente.
+# Credencial hacia Backstage: el Bearer de la persona pasa tal cual; sin él nginx usa BACKSTAGE_TOKEN (servicio); sin ninguno no envía nada.
 cuerpo() { docker run --rm --network "$NET" curlimages/curl:8.10.1 -s "$@"; }
 docker run -d --name pxtest-front-token --network "$NET" -e BACKSTAGE_URL=http://pxtest-stub -e BACKSTAGE_HOST=pxtest-stub -e BACKSTAGE_TOKEN=tokenservicio pxtest-front >/dev/null
 sleep 3
 [ "$(cuerpo http://pxtest-front-token:8080/backstage/api/branching/rules)" = "Bearer tokenservicio" ] || { echo "FALLO: con token configurado no se envía Authorization: Bearer <token>"; fallos=$((fallos + 1)); }
-[ "$(cuerpo -H 'Authorization: Bearer del-cliente' http://pxtest-front-token:8080/backstage/api/branching/rules)" = "Bearer tokenservicio" ] || { echo "FALLO: el token de servicio no sustituye al del cliente"; fallos=$((fallos + 1)); }
+[ "$(cuerpo -H 'Authorization: Bearer del-cliente' http://pxtest-front-token:8080/backstage/api/branching/rules)" = "Bearer del-cliente" ] || { echo "FALLO: el token de la persona no llega a Backstage"; fallos=$((fallos + 1)); }
+[ "$(cuerpo -H 'Authorization: Basic abc' http://pxtest-front-token:8080/backstage/api/branching/rules)" = "Bearer tokenservicio" ] || { echo "FALLO: una credencial que no es Bearer no se sustituye por la de servicio"; fallos=$((fallos + 1)); }
 [ "$(cuerpo -H 'Authorization: Bearer del-cliente' http://pxtest-front:8080/backstage/api/branching/rules)" = "Bearer del-cliente" ] || { echo "FALLO: sin token configurado no se deja pasar el del cliente"; fallos=$((fallos + 1)); }
 docker rm -f pxtest-front-token >/dev/null 2>&1
 

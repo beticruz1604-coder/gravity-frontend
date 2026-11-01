@@ -19,10 +19,17 @@ steps:
     entrypoint: npm
     args: ["run", "build"]
 
+  # Segundo build, con el inicio de sesión de usuario y contraseña, para la prueba tests/login.mjs.
+  - id: compilar-lab
+    name: node:22-bookworm-slim
+    entrypoint: npm
+    args: ["run", "build", "--", "--outDir", "dist-lab"]
+    env: ["VITE_IDENTITY_PROVIDER=lab"]
+
   - id: humo
     name: mcr.microsoft.com/playwright:v1.49.0-noble
     entrypoint: bash
-    args: ["-c", "npm i --no-save --no-audit --no-fund playwright@1.49.0 && { node tests/smoke.mjs; a=$$?; node tests/docs-viewer.mjs; b=$$?; node tests/homologation-reference.mjs; c=$$?; [ $$a -eq 0 ] && [ $$b -eq 0 ] && [ $$c -eq 0 ]; }"]
+    args: ["-c", "npm i --no-save --no-audit --no-fund playwright@1.49.0 && { node tests/smoke.mjs; a=$$?; node tests/docs-viewer.mjs; b=$$?; node tests/homologation-reference.mjs; c=$$?; node tests/access.mjs; d=$$?; node tests/login.mjs; e=$$?; [ $$a -eq 0 ] && [ $$b -eq 0 ] && [ $$c -eq 0 ] && [ $$d -eq 0 ] && [ $$e -eq 0 ]; }"]
 
   - id: proxy
     name: gcr.io/cloud-builders/docker

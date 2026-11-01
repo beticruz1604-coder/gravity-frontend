@@ -34,6 +34,10 @@ page.on("request", (r) => requests.push(r.url()));
 await page.route("**/backstage/**", (route) => {
   const url = new URL(route.request().url());
   const p = url.pathname;
+  if (p.includes("/api/access/me")) {
+    const secciones = ["Resumen", "Catálogo", "Soporte DevSecOps", "Insights", "Repositories", "Pipelines", "Releases", "TechDebt", "Pool de Agentes", "Compliance IQ", "Error Analytics", "Tools Health", "Log Analyzer", "Homologation Status", "Pipeline Engine (IDP)", "Usuarios"];
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true, roles: [], sections: secciones, admin: true }) });
+  }
   if (p.includes("/api/auth/")) return route.fulfill({ status: 403, contentType: "application/json", body: "{}" });
   if (p.endsWith("/api/catalog/entities")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([entity]) });
   if (p.includes("/api/techdocs/metadata/techdocs/default/component/mi-comp")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ build_timestamp: 1792814068814 }) });

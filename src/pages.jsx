@@ -13,6 +13,7 @@ import {
 
 import {
   PROJECT,
+  access,
   branching,
   catalog,
   homologation,
@@ -1093,6 +1094,69 @@ export function ToolsHealthPage() {
           </table>
         </div>
         <Footer loader={loader} source="Backstage" />
+      </div>
+    </section>
+  );
+}
+
+/** Control de acceso: roles y qué secciones ve cada uno, y las personas con sus grupos y roles. Solo Admin. */
+export function UsersPage() {
+  const loader = useData(async () => {
+    const [roles, users] = await Promise.all([access.roles(), access.users()]);
+    return { roles, users: users.users ?? [] };
+  });
+  const roles = loader.data?.roles?.roles ?? [];
+  const sections = loader.data?.roles?.sections ?? [];
+  const users = loader.data?.users ?? [];
+
+  return (
+    <section className="module-page">
+      <Heading
+        eyebrow="CONTROL DE ACCESO"
+        title="Usuarios"
+        description="Personas, grupos y roles de GRAVITY. El rol sale de los grupos del catálogo y decide qué secciones se muestran; el alta y la baja se hacen en el directorio."
+      />
+      <Stats items={[["Usuarios", loader.data ? users.length : "—"], ["Roles", loader.data ? roles.length : "—"], ["Secciones", sections.length || "—"]]} />
+      <ErrorBox message={loader.error && `No fue posible consultar el control de acceso. ${loader.error}`} />
+
+      <div className="module-panel panel-spaced">
+        <div className="panel-title"><strong>Personas</strong><small>Rol según sus grupos</small></div>
+        <div className="table-wrapper">
+          <table className="pool-table">
+            <thead><tr><th>Nombre</th><th>Correo</th><th>Roles</th><th>Grupos</th></tr></thead>
+            <tbody>
+              {users.length === 0 && <EmptyRow colSpan={4} loading={loader.loading}>Sin usuarios.</EmptyRow>}
+              {users.map((user) => (
+                <tr key={user.entityRef}>
+                  <td>{user.name}</td>
+                  <td>{user.email ?? "—"}</td>
+                  <td>{user.roles.length ? user.roles.map((role) => role.name).join(", ") : "Sin rol"}</td>
+                  <td>{user.groups.map((group) => group.replace("group:default/", "")).join(", ") || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="module-panel panel-spaced">
+        <div className="panel-title"><strong>Roles y secciones</strong><small>Qué ve cada rol en GRAVITY</small></div>
+        <div className="table-wrapper">
+          <table className="pool-table">
+            <thead>
+              <tr><th>Sección</th>{roles.map((role) => <th key={role.id} title={role.description}>{role.name}</th>)}</tr>
+            </thead>
+            <tbody>
+              {roles.length === 0 && <EmptyRow colSpan={1} loading={loader.loading}>Sin roles configurados.</EmptyRow>}
+              {sections.map((section) => (
+                <tr key={section}>
+                  <td>{section}</td>
+                  {roles.map((role) => <td key={role.id}>{role.sections.includes(section) ? "✔" : "—"}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );

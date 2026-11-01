@@ -2638,3 +2638,29 @@ td.wrap {
 .techdocs-content pre { overflow-x: auto; padding: 10px; border: 1px solid var(--border, #d0d4dc); border-radius: 6px; }
 .techdocs-content img { max-width: 100%; }
 .techdocs-content .headerlink { display: none; }
+
+.access-gate {
+  max-width: 560px;
+}
+
+.access-gate p {
+  margin: 8px 0 16px;
+}
+
+.login-form {
+  display: grid;
+  gap: 12px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.login-form input {
+  padding: 8px 10px;
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 6px;
+  font: inherit;
+}

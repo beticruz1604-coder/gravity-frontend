@@ -57,6 +57,10 @@ page.on("console", (m) => m.type() === "error" && !/Failed to load resource|stat
 
 await page.route("**/backstage/**", (route) => {
   const url = route.request().url();
+  if (url.includes("/api/access/me")) {
+    const secciones = ["Resumen", "Catálogo", "Soporte DevSecOps", "Insights", "Repositories", "Pipelines", "Releases", "TechDebt", "Pool de Agentes", "Compliance IQ", "Error Analytics", "Tools Health", "Log Analyzer", "Homologation Status", "Pipeline Engine (IDP)", "Usuarios"];
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true, roles: [], sections: secciones, admin: true }) });
+  }
   if (url.includes("/api/auth/")) return route.fulfill({ status: 403, contentType: "application/json", body: "{}" });
   if (url.includes("/api/homologation/items")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items, warnings: [] }) });
   const lista = /entities|tasks|pipelines|agent-pools|branches|policies|repositories|items|components|baseline|clusters/.test(url);
