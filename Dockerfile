@@ -4,6 +4,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
+# Inicio de sesión de la imagen: usuario y contraseña del laboratorio (el código por defecto es gcpIap).
+ARG VITE_IDENTITY_PROVIDER=lab
+ENV VITE_IDENTITY_PROVIDER=$VITE_IDENTITY_PROVIDER
 RUN npm run build
 
 FROM nginx:1.27-alpine

@@ -15,7 +15,11 @@ export const PROJECT = import.meta.env.VITE_AZDO_PROJECT ?? "demos";
  * firmada de IAP y Backstage la valida (proveedor gcpIap) y devuelve un token de ESE usuario; todas las llamadas lo llevan.
  * Si no hay IAP (desarrollo, o antes de activarlo) esa ruta no responde y se trabaja de forma anónima, como hasta ahora.
  */
-const IDENTITY_PROVIDER = "gcpIap";
+// Proveedor de inicio de sesión de Backstage: gcpIap = detrás de IAP (silencioso); lab = usuario y contraseña del laboratorio.
+const IDENTITY_PROVIDER = import.meta.env.VITE_IDENTITY_PROVIDER ?? "gcpIap";
+/** ¿La persona escribe usuario y contraseña? (con IAP el proxy ya la identificó) */
+export const INTERACTIVE_SIGN_IN = IDENTITY_PROVIDER === "lab";
+const SESSION_KEY = "gravity.session";
 const TOKEN_MARGIN_MS = 2 * 60 * 1000;
 const ANONYMOUS_RETRY_MS = 5 * 60 * 1000;
 
@@ -32,28 +36,62 @@ function tokenExpiry(token) {
   }
 }
 
+// Usuario y contraseña (base64) solo en memoria para renovar el token; nunca se guardan en el navegador.
+let loginHeader = null;
+
 async function loadSession() {
   try {
+    if (INTERACTIVE_SIGN_IN && !loginHeader) {
+      return restoreSession();
+    }
     const response = await fetch(`${BACKSTAGE_URL}/api/auth/${IDENTITY_PROVIDER}/refresh`, {
-      headers: { Accept: "application/json" }
+      headers: {
+        Accept: "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        ...(loginHeader ? { "X-Lab-Login": loginHeader } : {})
+      }
     });
     if (!response.ok) {
       return null;
     }
-    const data = await response.json();
-    const token = data?.backstageIdentity?.token;
-    if (!token) {
-      return null;
-    }
-    return {
-      token,
-      expiresAt: tokenExpiry(token),
-      profile: data.profile ?? {},
-      identity: data.backstageIdentity.identity ?? {}
-    };
+    return saveSession(toSession(await response.json()));
   } catch {
     return null;
   }
+}
+
+/** Guarda en la pestaña (no la contraseña) la sesión vigente, para no pedirla de nuevo al recargar la página. */
+function saveSession(value) {
+  try {
+    if (value) {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(value));
+    }
+  } catch {
+    // sin almacenamiento disponible: la sesión vive solo en memoria
+  }
+  return value;
+}
+
+function restoreSession() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "null");
+    return saved && saved.expiresAt - Date.now() > TOKEN_MARGIN_MS ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function toSession(data) {
+  const token = data?.backstageIdentity?.token;
+  if (!token) {
+    return null;
+  }
+  return {
+    token,
+    expiresAt: tokenExpiry(token),
+    profile: data.profile ?? {},
+    identity: data.backstageIdentity.identity ?? {}
+  };
 }
 
 /** Token vigente del usuario (se renueva solo antes de caducar) o undefined si se trabaja sin identidad. */
@@ -81,6 +119,42 @@ async function currentToken() {
 function forgetSession() {
   session = null;
   anonymousUntil = 0;
+}
+
+/** Inicia sesión con usuario y contraseña. Rechaza con el mensaje de Backstage si no coinciden. */
+export async function signIn(username, password) {
+  const header = btoa(unescape(encodeURIComponent(`${username}:${password}`)));
+  const response = await fetch(`${BACKSTAGE_URL}/api/auth/${IDENTITY_PROVIDER}/refresh`, {
+    headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest", "X-Lab-Login": header }
+  });
+  if (!response.ok) {
+    let detail = "Usuario o contraseña incorrectos.";
+    try {
+      detail = (await response.json())?.error?.message ?? detail;
+    } catch {
+      // se conserva el mensaje por defecto
+    }
+    throw new Error(detail);
+  }
+  const fresh = toSession(await response.json());
+  if (!fresh) {
+    throw new Error("Backstage no entregó la identidad.");
+  }
+  loginHeader = header;
+  session = saveSession(fresh);
+  anonymousUntil = 0;
+  return fresh;
+}
+
+/** Cierra la sesión: olvida el token y la contraseña en memoria. */
+export async function signOut() {
+  loginHeader = null;
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // nada que borrar
+  }
+  forgetSession();
 }
 
 /** Quién está usando GRAVITY: { name, email, entityRef, groups } o null si no hay identidad (modo anónimo). */
@@ -185,6 +259,14 @@ async function request(path, options = {}) {
 }
 
 const enc = encodeURIComponent;
+
+/* Control de acceso: quién es la persona y qué secciones le tocan (el backend decide; GRAVITY solo las pinta) */
+
+export const access = {
+  me: () => request("/api/access/me"),
+  roles: () => request("/api/access/roles"),
+  users: () => request("/api/access/users")
+};
 
 /* Catálogo */
 

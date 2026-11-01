@@ -19,11 +19,17 @@ map $request_method $clave_escritura {
 limit_req_zone $clave_escritura zone=escrituras:10m rate=10r/s;
 
 # ── Credencial hacia Backstage ──────────────────────────────────────────────
-# Con BACKSTAGE_TOKEN definido (secreto backstage-front-token) nginx envía «Authorization: Bearer <token>» en cada llamada a
-# Backstage y sustituye cualquier cabecera Authorization del navegador. Sin él (desarrollo local) deja pasar la del cliente.
-map "${BACKSTAGE_TOKEN}" $backstage_authorization {
-  ""      $http_authorization;
+# Si el navegador envía «Authorization: Bearer <token>» (el token de la persona, que Backstage emitió al iniciar sesión) nginx
+# lo reenvía tal cual: Backstage lo valida y así sabe quién es. Sin él, con BACKSTAGE_TOKEN definido (secreto
+# backstage-front-token) nginx usa el token de servicio; sin ninguno de los dos (desarrollo local) no envía credencial.
+# Un token ajeno o falso no da más acceso: Backstage lo rechaza (401) y el front reintenta sin sesión.
+map "${BACKSTAGE_TOKEN}" $token_servicio {
+  ""      "";
   default "Bearer ${BACKSTAGE_TOKEN}";
+}
+map $http_authorization $backstage_authorization {
+  "~^Bearer\ .+" $http_authorization;
+  default        $token_servicio;
 }
 
 # ── Lista de rutas de Backstage que el front necesita ──────────────────────
@@ -36,6 +42,9 @@ map "$request_method $uri $args" $ruta_permitida {
   ~^(GET|HEAD)\ /backstage/api/(catalog/entities|catalog/entities/by-name/[^/]+/[^/]+/[^/]+|scorecards/components|kubernetes/clusters|techdocs/metadata/techdocs/[^/]+/component/[^/]+|techdocs/static/docs/[^/]+/component/[^/]+/(?!.*\.\.)[A-Za-z0-9._/-]*)\ .*$ 1;
   ~^(GET|HEAD)\ /backstage/api/homologation/(items|health|components|baseline|requirements)(/[^/]+)?\ .*$ 1;
   ~^(GET|HEAD)\ /backstage/api/branching/(rules|health|pipelines/[^/]+|agent-pools/[^/]+|repositories/[^/]+/[^/]+|branches/[^/]+/[^/]+|policies/[^/]+/[^/]+)\ .*$ 1;
+  ~^(GET|HEAD)\ /backstage/api/access/(me|roles|users)\ .*$ 1;
+  # Inicio de sesión del laboratorio (usuario y contraseña): Backstage entrega el token de la persona en /auth/lab/refresh.
+  ~^(GET|HEAD)\ /backstage/api/auth/lab/refresh\ .*$ 1;
   ~^(GET|HEAD)\ /backstage/api/scaffolder/v2/(tasks|tasks/[^/]+|tasks/[^/]+/events|templates/default/template/[^/]+/parameter-schema)\ .*$ 1;
 
   ~^POST\ /backstage/api/scaffolder/v2/(tasks|tasks/[^/]+/cancel)\ .*$ 1;
