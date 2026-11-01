@@ -6,7 +6,9 @@ import {
   Search,
   ExternalLink,
   Check,
-  X
+  X,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 
 import {
@@ -229,8 +231,64 @@ function RequirementsPanel({ tab }) {
   );
 }
 
+const REFERENCE_KIND = { politica: "Política de versiones", "linea-base": "Línea base de la tecnología", paridad: "Entre ambientes" };
+
+/** Normaliza la referencia que entrega Backstage (puede faltar o venir incompleta con un backend antiguo). */
+function referenceOf(item) {
+  const r = item?.reference;
+  if (!r || typeof r !== "object" || typeof r.summary !== "string") return null;
+  const sections = Array.isArray(r.sections)
+    ? r.sections
+        .filter((s) => s && typeof s.title === "string")
+        .map((s) => ({ title: s.title, items: Array.isArray(s.items) ? s.items.map(String) : [] }))
+    : [];
+  return { kind: r.kind, summary: r.summary, sections };
+}
+
+/** Celda «Homologado con»: contra qué se mide el elemento, con un botón para desplegar el detalle. */
+function ReferenceCell({ item, open, onToggle }) {
+  const reference = referenceOf(item);
+  if (!reference) return <span className="status-text status-none">—</span>;
+  return (
+    <button
+      type="button"
+      className="reference-toggle"
+      aria-expanded={open}
+      title={open ? "Ocultar el detalle" : "Ver con qué está homologado"}
+      onClick={onToggle}
+    >
+      {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      <span>{reference.summary}</span>
+    </button>
+  );
+}
+
+/** Ventana desplegable bajo la fila: la política, la línea base o la comparación entre ambientes con la que se mide. */
+function ReferenceDetail({ item }) {
+  const reference = referenceOf(item);
+  if (!reference) return null;
+  return (
+    <div className="reference-detail">
+      <strong>{REFERENCE_KIND[reference.kind] ?? "Referencia"}</strong>
+      {reference.sections.map((section) => (
+        <div key={section.title}>
+          <h5>{section.title}</h5>
+          <List items={section.items} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function HomologationPage() {
   const [tab, setTab] = React.useState("infraestructura");
+  const [expanded, setExpanded] = React.useState(() => new Set());
+  const toggle = (id) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("Todos");
   const loader = useData(() => homologation.items(), { interval: 60000 });
@@ -289,25 +347,34 @@ export function HomologationPage() {
                 <th>Versión / Tipo</th>
                 <th>Ambiente</th>
                 <th>Estado</th>
+                <th>Homologado con</th>
                 <th>Motivo (por qué no está homologado)</th>
                 <th>Descripción</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <EmptyRow colSpan={6} loading={loader.loading && !loader.data}>No hay información disponible.</EmptyRow>
+                <EmptyRow colSpan={7} loading={loader.loading && !loader.data}>No hay información disponible.</EmptyRow>
               )}
               {filtered.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.name}</td>
-                  <td>{[item.type, item.version].filter(Boolean).join(" · ")}</td>
-                  <td>{item.environment}</td>
-                  <td><StatusBadge status={item.status} /></td>
-                  <td className="wrap" title={item.reason}>
-                    {item.status === "homologado" ? <span className="status-text status-none">—</span> : (item.reason ?? "Sin detalle")}
-                  </td>
-                  <td>{item.description ?? "—"}</td>
-                </tr>
+                <React.Fragment key={item.id}>
+                  <tr>
+                    <td>{item.name}</td>
+                    <td>{[item.type, item.version].filter(Boolean).join(" · ")}</td>
+                    <td>{item.environment}</td>
+                    <td><StatusBadge status={item.status} /></td>
+                    <td className="wrap"><ReferenceCell item={item} open={expanded.has(item.id)} onToggle={() => toggle(item.id)} /></td>
+                    <td className="wrap" title={item.reason}>
+                      {item.status === "homologado" ? <span className="status-text status-none">—</span> : (item.reason ?? "Sin detalle")}
+                    </td>
+                    <td>{item.description ?? "—"}</td>
+                  </tr>
+                  {expanded.has(item.id) && (
+                    <tr className="reference-row">
+                      <td colSpan={7}><ReferenceDetail item={item} /></td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
