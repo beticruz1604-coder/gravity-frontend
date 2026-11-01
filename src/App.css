@@ -2622,6 +2622,12 @@ td.wrap {
 .requirements-panel summary { cursor: pointer; font-weight: 600; }
 .requirements-panel h4 { margin: 12px 0 4px; }
 .requirements-list { margin: 4px 0 8px; padding-left: 20px; }
+.reference-toggle { display: inline-flex; align-items: flex-start; gap: 4px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.reference-toggle svg { flex: none; margin-top: 3px; }
+.reference-toggle:hover span { text-decoration: underline; }
+.reference-row > td { background: var(--surface-muted, rgba(120, 130, 150, 0.08)); }
+.reference-detail { padding: 4px 8px 8px; }
+.reference-detail h5 { margin: 10px 0 2px; font-size: 0.9em; color: var(--muted, #667); }
 
 .techdocs { margin-top: 12px; }
 .techdocs-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
