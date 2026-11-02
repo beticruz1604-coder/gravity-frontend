@@ -95,7 +95,8 @@ await page.fill('input[type="password"]', "clave-correcta");
 await page.click('button[type="submit"]');
 await page.waitForSelector("form.login-form", { state: "detached" });
 sesionRevocada = true;
-await page.locator(".sidebar nav button", { hasText: "Repositories" }).click();
+// La app puede volver al formulario antes del clic (una llamada en curso también recibe el 401): el clic es opcional.
+await page.locator(".sidebar nav button", { hasText: "Repositories" }).click({ timeout: 3000 }).catch(() => {});
 await page.waitForSelector("form.login-form", { timeout: 15000 }).catch(() => espera(false, "Sesión perdida: no volvió al formulario"));
 
 espera(errores.length === 0, `Errores no controlados: ${errores.join("; ")}`);
