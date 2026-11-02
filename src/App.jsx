@@ -259,21 +259,8 @@ function Sidebar({ selectedPage, onNavigate, access }) {
 
 /** Pantalla de entrada: se muestra cuando la persona no tiene ninguna sección disponible. */
 function AccessGate({ access }) {
-  const [error, setError] = React.useState(null);
-  const [username, setUsername] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const login = (event) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    access
-      .signIn(username.trim(), password)
-      .catch((err) => setError(err.message))
-      .finally(() => setBusy(false));
-  };
-  let title = "Inicia sesión para entrar a GRAVITY";
-  let text = "Tu rol decide qué secciones puedes ver.";
+  let title = "No hay secciones disponibles";
+  let text = "Tu cuenta no tiene secciones habilitadas.";
   if (access.error) {
     title = "No se pudo comprobar tu acceso";
     text = access.error;
@@ -286,25 +273,69 @@ function AccessGate({ access }) {
       <div className="module-panel panel-spaced access-gate">
         <div className="panel-title"><strong>{title}</strong></div>
         <p>{text}</p>
-        {!access.authenticated && INTERACTIVE_SIGN_IN && (
-          <form className="login-form" onSubmit={login}>
-            <label>
-              Usuario
-              <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required />
-            </label>
-            <label>
-              Contraseña
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-            </label>
-            {error && <p role="alert">{error}</p>}
-            <button type="submit" className="primary-button" disabled={busy}>{busy ? "Entrando…" : "Iniciar sesión"}</button>
-          </form>
-        )}
         {access.authenticated && (
           <button type="button" className="primary-button" onClick={access.signOut}>Cerrar sesión</button>
         )}
       </div>
     </section>
+  );
+}
+
+/** Inicio de sesión a pantalla completa: sin sesión es lo único que se ve. */
+function LoginScreen({ access }) {
+  const [error, setError] = React.useState(null);
+  const [username, setUsername] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const login = (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    access
+      .signIn(username.trim(), password)
+      .catch((err) => setError(err.message))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="login-screen">
+      <div className="login-card">
+        <div className="login-brand">
+          <div className="logo-box">A</div>
+          <div>
+            <div className="brand-name">GRAVITY <span className="infinity">∞</span></div>
+            <div className="brand-subtitle">DEVSECOPS INTELLIGENCE PLATFORM</div>
+          </div>
+        </div>
+        {access.loading ? (
+          <p className="login-hint">Comprobando sesión…</p>
+        ) : (
+          <>
+            <h1>Bienvenido</h1>
+            <p className="login-hint">Inicia sesión para entrar. Tu rol decide qué secciones puedes ver.</p>
+            {access.error && <p role="alert" className="login-error">No se pudo comprobar tu acceso: {access.error}</p>}
+            <form className="login-form" onSubmit={login}>
+              <label>
+                Usuario
+                <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required />
+              </label>
+              <label>
+                Contraseña
+                <span className="password-field">
+                  <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+                  <button type="button" className="password-toggle" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>
+                    {showPassword ? "Ocultar" : "Mostrar"}
+                  </button>
+                </span>
+              </label>
+              {error && <p role="alert" className="login-error">{error}</p>}
+              <button type="submit" className="primary-button login-submit" disabled={busy}>{busy ? "Entrando…" : "Iniciar sesión"}</button>
+            </form>
+          </>
+        )}
+      </div>
+      <small className="login-footer">Pre Production · Coppel-Retail</small>
+    </div>
   );
 }
 
@@ -2181,6 +2212,10 @@ function App() {
     }),
     [navigate]
   );
+
+  if (INTERACTIVE_SIGN_IN && !access.authenticated) {
+    return <LoginScreen access={access} />;
+  }
 
   return (
     <NavContext.Provider value={navValue}>
