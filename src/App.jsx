@@ -259,8 +259,8 @@ function Sidebar({ selectedPage, onNavigate, access }) {
 
 /** Pantalla de entrada: se muestra cuando la persona no tiene ninguna sección disponible. */
 function AccessGate({ access }) {
-  let title = "No hay secciones disponibles";
-  let text = "Tu cuenta no tiene secciones habilitadas.";
+  let title = "Inicia sesión para entrar a GRAVITY";
+  let text = "Tu rol decide qué secciones puedes ver.";
   if (access.error) {
     title = "No se pudo comprobar tu acceso";
     text = access.error;

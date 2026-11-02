@@ -1,5 +1,5 @@
 import React from "react";
-import { access, signIn as startSignIn, signOut as endSignOut, whoAmI } from "./backstage";
+import { access, SESSION_LOST_EVENT, signIn as startSignIn, signOut as endSignOut, whoAmI } from "./backstage";
 
 /** Usuario que está usando GRAVITY (null mientras carga o si no hay identidad). */
 export function useIdentity(version) {
@@ -34,11 +34,14 @@ export function useAccess() {
       const me = await access.me();
       setState({ loading: false, error: null, authenticated: Boolean(me.authenticated), roles: me.roles ?? [], sections: me.sections ?? [], admin: Boolean(me.admin) });
     } catch (err) {
-      setState({ loading: false, error: err.message, authenticated: false, roles: [], sections: [], admin: false });
+      // 401: Backstage no reconoce a nadie; es «sin sesión», no un error.
+      setState({ loading: false, error: err.status === 401 ? null : err.message, authenticated: false, roles: [], sections: [], admin: false });
     }
   }, []);
   React.useEffect(() => {
     load();
+    window.addEventListener(SESSION_LOST_EVENT, load);
+    return () => window.removeEventListener(SESSION_LOST_EVENT, load);
   }, [load]);
   const signIn = React.useCallback(async (username, password) => {
     await startSignIn(username, password);
