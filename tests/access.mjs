@@ -27,10 +27,14 @@ const roles = {
     { id: "admin", name: "Admin (Full Access)", group: "group:default/admin", admin: true, sections: ALL }
   ]
 };
-const users = { users: [{ entityRef: "user:default/ana", name: "Ana Pérez", email: "ana@x.com", groups: ["group:default/scm"], roles: [{ id: "scm", name: "Ingeniero SCM" }], admin: false }] };
+const users = { users: [
+  { entityRef: "user:default/ana", name: "Ana Pérez", email: "ana@x.com", groups: ["group:default/scm"], roles: [{ id: "scm", name: "Ingeniero SCM" }], admin: false },
+  { entityRef: "user:default/luis.lopez", username: "luis.lopez", name: "Luis Lopez", email: "luis@x.com", groups: ["group:default/scm"], roles: [{ id: "scm", name: "Ingeniero SCM" }], admin: false, managed: true, active: true }
+] };
 
 const fallos = [];
 const altas = [];
+const bajas = [];
 const espera = (cond, msg) => cond || fallos.push(msg);
 
 const browser = await chromium.launch();
@@ -44,8 +48,16 @@ async function abrir(me) {
     if (url.includes("/api/access/me")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(me) });
     if (url.includes("/api/access/roles")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(roles) });
     if (url.includes("/api/access/users") && route.request().method() === "POST") {
-      altas.push(route.request().postDataJSON());
-      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ user: { username: "fidencio.santander" }, temporaryPassword: "TempoClave23456x" }) });
+      const alta = route.request().postDataJSON();
+      altas.push(alta);
+      const respuesta = alta.email
+        ? { user: { username: alta.username }, emailSent: true, email: alta.email }
+        : { user: { username: alta.username }, emailSent: false, temporaryPassword: "TempoClave23456x" };
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(respuesta) });
+    }
+    if (url.includes("/api/access/users/") && route.request().method() === "DELETE") {
+      bajas.push(url.split("/api/access/users/")[1]);
+      return route.fulfill({ status: 204, body: "" });
     }
     if (url.includes("/api/access/users")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(users) });
     if (url.includes("/api/auth/")) return route.fulfill({ status: 403, contentType: "application/json", body: "{}" });
@@ -85,7 +97,22 @@ async function abrir(me) {
   await page.locator("button", { hasText: "Crear usuario" }).click();
   await page.waitForSelector(".temp-password", { timeout: 5000 }).catch(() => {});
   espera((await page.locator(".temp-password").innerText().catch(() => "")).includes("TempoClave23456x"), "Alta: no se muestra la contraseña temporal");
-  espera(JSON.stringify(altas[0]) === JSON.stringify({ username: "fidencio.santander", displayName: "", roles: ["scm"] }), `Alta: se envió ${JSON.stringify(altas[0])}`);
+  espera(JSON.stringify(altas[0]) === JSON.stringify({ username: "fidencio.santander", displayName: "", email: "", roles: ["scm"] }), `Alta: se envió ${JSON.stringify(altas[0])}`);
+  // Alta con correo: se avisa del envío y no se muestra contraseña.
+  await page.locator(".temp-password button", { hasText: "Cerrar" }).click();
+  await page.fill('input[placeholder="nombre.apellido"]', "maria.lopez");
+  await page.fill('input[placeholder="nombre.apellido@empresa.com"]', "maria@x.com");
+  await page.locator(".user-form .role-checks label", { hasText: "Ingeniero SCM" }).click();
+  await page.locator("button", { hasText: "Crear usuario" }).click();
+  await page.waitForSelector(".temp-password", { timeout: 5000 }).catch(() => {});
+  const aviso = await page.locator(".temp-password").innerText().catch(() => "");
+  espera(aviso.includes("Se envió") && aviso.includes("maria@x.com") && !aviso.includes("TempoClave"), `Alta con correo: aviso incorrecto: ${aviso}`);
+  // Borrar: pide confirmación y llama a DELETE; las cuentas fijas no tienen el botón.
+  page.once("dialog", (d) => d.accept());
+  await page.locator("tr", { hasText: "luis.lopez" }).locator("button", { hasText: "Borrar" }).click();
+  await page.waitForTimeout(800);
+  espera(JSON.stringify(bajas) === JSON.stringify(["luis.lopez"]), `Borrar: se pidió ${JSON.stringify(bajas)}`);
+  espera((await page.locator("tr", { hasText: "Ana Pérez" }).locator("button", { hasText: "Borrar" }).count()) === 0, "Borrar: una cuenta fija no debe tener el botón");
   espera(errores.length === 0, `Admin: errores no controlados: ${errores.join("; ")}`);
 }
 

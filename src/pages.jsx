@@ -1122,11 +1122,20 @@ function RoleChecks({ roles, value, onChange }) {
   );
 }
 
-/** Contraseña temporal recién generada: se muestra una sola vez. */
-function TemporaryPassword({ username, password, onClose }) {
+/** Resultado de un alta o un restablecimiento: aviso de correo enviado o la contraseña temporal, que se muestra una sola vez. */
+function TemporaryPassword({ username, password, email, emailError, onClose }) {
   const [copied, setCopied] = React.useState(false);
+  if (!password) {
+    return (
+      <div className="temp-password" role="status">
+        <span>Se envió la contraseña temporal de <strong>{username}</strong> a <strong>{email}</strong>. Al entrar se le pedirá cambiarla.</span>
+        <button type="button" className="link-button" onClick={onClose}>Cerrar</button>
+      </div>
+    );
+  }
   return (
     <div className="temp-password" role="status">
+      {emailError && <span className="field-error">{emailError}</span>}
       <span>Contraseña temporal de <strong>{username}</strong>:</span>
       <code>{password}</code>
       <button
@@ -1149,9 +1158,12 @@ export function UsersPage() {
   });
   const roles = loader.data?.roles?.roles ?? [];
   const sections = loader.data?.roles?.sections ?? [];
+  const emailEnabled = Boolean(loader.data?.roles?.emailEnabled);
   const users = loader.data?.users ?? [];
 
   const [username, setUsername] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [editEmail, setEditEmail] = React.useState("");
   const [displayName, setDisplayName] = React.useState("");
   const [newRoles, setNewRoles] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
@@ -1178,24 +1190,31 @@ export function UsersPage() {
   const create = (event) => {
     event.preventDefault();
     run(async () => {
-      const result = await access.createUser({ username: username.trim().toLowerCase(), displayName: displayName.trim(), roles: newRoles });
-      setIssued({ username: result.user.username, password: result.temporaryPassword });
+      const result = await access.createUser({ username: username.trim().toLowerCase(), displayName: displayName.trim(), email: email.trim(), roles: newRoles });
+      setIssued({ username: result.user.username, password: result.temporaryPassword, email: result.email, emailError: result.emailError });
       setUsername("");
+      setEmail("");
       setDisplayName("");
       setNewRoles([]);
     });
   };
   const saveRoles = (user) =>
     run(async () => {
-      await access.updateUser(user.username, { roles: editRoles });
+      await access.updateUser(user.username, { roles: editRoles, email: editEmail.trim() });
       setEditing(null);
     });
   const toggleActive = (user) => run(() => access.updateUser(user.username, { active: !user.active }));
   const reset = (user) =>
     run(async () => {
       const result = await access.resetPassword(user.username);
-      setIssued({ username: user.username, password: result.temporaryPassword });
+      setIssued({ username: user.username, password: result.temporaryPassword, email: result.email, emailError: result.emailError });
     });
+  const remove = (user) => {
+    if (!window.confirm(`¿Borrar la cuenta ${user.username}? No se puede deshacer; si solo quieres impedir que entre, desactívala.`)) {
+      return;
+    }
+    run(() => access.deleteUser(user.username));
+  };
 
   return (
     <section className="module-page">
@@ -1208,11 +1227,18 @@ export function UsersPage() {
       <ErrorBox message={loader.error && `No fue posible consultar el control de acceso. ${loader.error}`} />
 
       <div className="module-panel panel-spaced">
-        <div className="panel-title"><strong>Nuevo usuario</strong><small>Se genera una contraseña temporal</small></div>
+        <div className="panel-title">
+          <strong>Nuevo usuario</strong>
+          <small>{emailEnabled ? "La contraseña temporal se envía por correo" : "Se genera una contraseña temporal para entregarla a mano (el correo no está configurado)"}</small>
+        </div>
         <form className="user-form" onSubmit={create}>
           <label>
             Usuario
             <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="nombre.apellido" autoComplete="off" required />
+          </label>
+          <label>
+            Correo{emailEnabled ? "" : " (opcional)"}
+            <input type="text" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nombre.apellido@empresa.com" autoComplete="off" />
           </label>
           <label>
             Nombre para mostrar (opcional)
@@ -1229,20 +1255,27 @@ export function UsersPage() {
           <p className="field-error">Usa la forma nombre.apellido: minúsculas, sin acentos, espacios ni números (p. ej. fidencio.santander).</p>
         )}
         {error && <p className="field-error" role="alert">{error}</p>}
-        {issued && <TemporaryPassword username={issued.username} password={issued.password} onClose={() => setIssued(null)} />}
+        {issued && <TemporaryPassword {...issued} onClose={() => setIssued(null)} />}
       </div>
 
       <div className="module-panel panel-spaced">
         <div className="panel-title"><strong>Personas</strong><small>Roles y estado de cada cuenta</small></div>
         <div className="table-wrapper">
           <table className="pool-table">
-            <thead><tr><th>Usuario</th><th>Nombre</th><th>Roles</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Usuario</th><th>Nombre</th><th>Correo</th><th>Roles</th><th>Estado</th><th>Acciones</th></tr></thead>
             <tbody>
-              {users.length === 0 && <EmptyRow colSpan={5} loading={loader.loading}>Sin usuarios.</EmptyRow>}
+              {users.length === 0 && <EmptyRow colSpan={6} loading={loader.loading}>Sin usuarios.</EmptyRow>}
               {users.map((user) => (
                 <tr key={user.entityRef}>
                   <td>{user.username ?? user.entityRef.replace(/^user:default\//, "")}</td>
                   <td>{user.name}</td>
+                  <td>
+                    {editing === user.username ? (
+                      <input type="text" className="inline-input" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="correo" />
+                    ) : (
+                      user.email ?? "—"
+                    )}
+                  </td>
                   <td>
                     {editing === user.username ? (
                       <RoleChecks roles={roles} value={editRoles} onChange={setEditRoles} />
@@ -1276,15 +1309,17 @@ export function UsersPage() {
                             onClick={() => {
                               setEditing(user.username);
                               setEditRoles(user.roles.map((role) => role.id));
+                              setEditEmail(user.email ?? "");
                             }}
                           >
-                            Roles
+                            Editar
                           </button>
                         )}
                         <button type="button" className="link-button" disabled={busy} onClick={() => toggleActive(user)}>
                           {user.active ? "Desactivar" : "Activar"}
                         </button>
                         <button type="button" className="link-button" disabled={busy || !user.active} onClick={() => reset(user)}>Restablecer contraseña</button>
+                        <button type="button" className="link-button danger-link" disabled={busy} onClick={() => remove(user)}>Borrar</button>
                       </div>
                     ) : (
                       "—"

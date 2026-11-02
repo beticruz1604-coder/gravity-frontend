@@ -136,6 +136,12 @@ await campos.nth(2).fill("NuevaClave2026");
 await page.click('button[type="submit"]');
 await page.waitForSelector(".sidebar nav button", { timeout: 15000 });
 espera((await page.locator(".sidebar").innerText()).includes("Cambiar contraseña"), "Temporal: falta «Cambiar contraseña» en la barra lateral");
+// «Cerrar sesión» debe quedar dentro de la barra lateral y visible, también junto a «Cambiar contraseña».
+for (const texto of ["Cambiar contraseña", "Cerrar sesión"]) {
+  const caja = await page.locator(".sidebar button", { hasText: texto }).boundingBox();
+  const barra = await page.locator(".sidebar").boundingBox();
+  espera(caja && caja.x >= barra.x && caja.x + caja.width <= barra.x + barra.width + 1 && caja.y + caja.height <= barra.y + barra.height + 1, `«${texto}» queda fuera de la barra lateral: ${JSON.stringify(caja)} en ${JSON.stringify(barra)}`);
+}
 
 espera(errores.length === 0, `Errores no controlados: ${errores.join("; ")}`);
 
