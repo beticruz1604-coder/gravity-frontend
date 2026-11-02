@@ -34,6 +34,11 @@ await page.route("**/backstage/**", (route) => {
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true, roles: [], sections: secciones, admin: true }) });
   }
   if (url.includes("/api/auth/")) return route.fulfill({ status: 403, contentType: "application/json", body: "{}" });
+  if (url.includes("/api/branching/rules")) {
+    // Un rol puede ligarse a uno o a varios grupos de Backstage.
+    const reglas = { strategy: "prueba", roles: [{ id: "scm", name: "SCM" }, { id: "lider-tecnico", name: "Líder técnico" }], roleGroups: { scm: "group:default/scm", "lider-tecnico": ["group:default/lideres-tecnicos", "group:default/sre"] } };
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(reglas) });
+  }
   const lista = /entities|tasks|pipelines|agent-pools|branches|policies|repositories|items|components|baseline|clusters/.test(url);
   return route.fulfill({ status: 200, contentType: "application/json", body: lista ? "[]" : "{}" });
 });
@@ -44,6 +49,10 @@ const pantallas = await page.locator(".sidebar nav button").allInnerTexts();
 for (const nombre of pantallas) {
   await page.locator(".sidebar nav button", { hasText: nombre.trim() }).first().click();
   await page.waitForTimeout(700);
+  if (nombre.trim() === "Compliance IQ") {
+    const texto = await page.locator("main").innerText();
+    if (!texto.includes("lideres-tecnicos, sre")) errors.push("Compliance IQ: no muestra los varios grupos de un rol");
+  }
 }
 console.log(`pantallas recorridas: ${pantallas.length}`);
 

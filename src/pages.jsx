@@ -896,7 +896,7 @@ export function ComplianceIqPage() {
                 <tr key={role.id}>
                   <td>{role.name}</td>
                   <td>{role.description ?? "—"}</td>
-                  <td>{rules.roleGroups?.[role.id]?.replace("group:default/", "") ?? "—"}</td>
+                  <td>{[rules.roleGroups?.[role.id] ?? []].flat().map((g) => g.replace("group:default/", "")).join(", ") || "—"}</td>
                 </tr>
               ))}
             </tbody>
