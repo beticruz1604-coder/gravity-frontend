@@ -68,15 +68,16 @@ sleep 3
 [ -z "$(cuerpo -H 'Authorization: Basic abc' http://pxtest-front-token:8080/backstage/api/branching/rules)" ] || { echo "FALLO: una credencial que no es Bearer no debe pasar"; fallos=$((fallos + 1)); }
 docker rm -f pxtest-front-token >/dev/null 2>&1
 
-# Rol: si Backstage niega la llamada en /api/access/authorize, nginx responde 403 sin llegar a la ruta; si la consulta falla, 503.
+# Rol: Backstage recibe el método y la ruta originales; si niega la llamada, nginx responde 403 sin llegar a la ruta; si la consulta falla, 503.
 docker build -q -t pxtest-stub-deny - >/dev/null <<'EOS'
 FROM nginx:1.27-alpine
-RUN printf 'server { listen 80; location = /api/access/authorize { return 403; } location / { default_type application/json; return 200 "llego"; } }\n' > /etc/nginx/conf.d/default.conf
+RUN printf 'server { listen 80; location = /api/access/authorize { if ($http_x_original_uri = "/backstage/api/catalog/entities") { return 204; } return 403; } location / { default_type application/json; return 200 "llego"; } }\n' > /etc/nginx/conf.d/default.conf
 EOS
 docker run -d --name pxtest-stub-deny --network "$NET" pxtest-stub-deny >/dev/null
 docker run -d --name pxtest-front-deny --network "$NET" -e BACKSTAGE_URL=http://pxtest-stub-deny -e BACKSTAGE_HOST=pxtest-stub-deny pxtest-front >/dev/null
 docker run -d --name pxtest-front-caido --network "$NET" -e BACKSTAGE_URL=http://pxtest-stub -e BACKSTAGE_HOST=pxtest-stub pxtest-front >/dev/null
 sleep 3
+[ "$(cuerpo http://pxtest-front-deny:8080/backstage/api/catalog/entities)" = "llego" ] || { echo "FALLO: Backstage no recibe la ruta original en la autorización"; fallos=$((fallos + 1)); }
 [ "$(cuerpo -o /dev/null -w '%{http_code}' http://pxtest-front-deny:8080/backstage/api/branching/rules)" = "403" ] || { echo "FALLO: el 403 del rol no se respeta"; fallos=$((fallos + 1)); }
 cuerpo http://pxtest-front-deny:8080/backstage/api/branching/rules | grep -q "Tu rol no permite" || { echo "FALLO: falta el mensaje del 403 del rol"; fallos=$((fallos + 1)); }
 docker rm -f pxtest-stub >/dev/null 2>&1

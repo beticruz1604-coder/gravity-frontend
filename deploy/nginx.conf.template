@@ -66,7 +66,7 @@ server {
     proxy_set_header Content-Length "";
     proxy_set_header Host ${BACKSTAGE_HOST};
     proxy_set_header Authorization $backstage_authorization;
-    proxy_set_header X-Original-Uri $uri;
+    proxy_set_header X-Original-Uri $ruta_original;
     proxy_set_header X-Original-Method $request_method;
     proxy_connect_timeout 3s;
     proxy_read_timeout 15s;
@@ -89,6 +89,8 @@ server {
     if ($ruta_permitida = 0) {
       return 403;
     }
+    # Dentro de la subpetición $uri ya es /_autorizar: la ruta original (decodificada y normalizada) se guarda antes.
+    set $ruta_original $uri;
     auth_request /_autorizar;
     error_page 403 = @sin_permiso;
     error_page 500 = @backstage_no_disponible;
