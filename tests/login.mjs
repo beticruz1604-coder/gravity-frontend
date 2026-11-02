@@ -22,6 +22,8 @@ const server = http
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
 const jwt = (exp) => `${b64({ alg: "none" })}.${b64({ exp })}.x`;
 const VALID = Buffer.from("ana:clave-correcta").toString("base64");
+const NUEVO = Buffer.from("nuevo.usuario:Temporal1234567").toString("base64");
+const NUEVO_CAMBIADA = Buffer.from("nuevo.usuario:NuevaClave2026").toString("base64");
 
 const fallos = [];
 const espera = (cond, msg) => cond || fallos.push(msg);
@@ -33,6 +35,8 @@ const errores = [];
 page.on("pageerror", (e) => errores.push(e.message));
 let intentos = 0;
 let sesionRevocada = false;
+let quien = "ana";
+let temporal = true;
 
 await page.route("**/backstage/**", (route) => {
   const url = route.request().url();
@@ -41,13 +45,25 @@ await page.route("**/backstage/**", (route) => {
   if (sesionRevocada) return json(401, { error: { name: "AuthenticationError", message: "Illegal token" } });
   if (url.includes("/api/auth/lab/refresh")) {
     intentos += 1;
-    if (headers["x-lab-login"] !== VALID) return json(401, { error: { message: "Usuario o contraseña incorrectos." } });
+    const h = headers["x-lab-login"];
+    if (h === NUEVO || h === NUEVO_CAMBIADA) quien = "nuevo";
+    else if (h === VALID) quien = "ana";
+    else return json(401, { error: { message: "Usuario o contraseña incorrectos." } });
     return json(200, {
       profile: { displayName: "ana" },
       backstageIdentity: { token: jwt(Math.floor(Date.now() / 1000) + 3600), identity: { userEntityRef: "user:default/ana", ownershipEntityRefs: ["user:default/ana", "group:default/scm"] } }
     });
   }
+  if (url.includes("/api/access/me/password")) {
+    const body = route.request().postDataJSON();
+    if (body.currentPassword !== "Temporal1234567") return json(400, { error: "La contraseña actual no es correcta." });
+    temporal = false;
+    return route.fulfill({ status: 204, body: "" });
+  }
   if (url.includes("/api/access/me")) {
+    if (headers.authorization?.startsWith("Bearer ") && quien === "nuevo") {
+      return json(200, { authenticated: true, roles: [{ id: "scm", name: "Ingeniero SCM" }], sections: temporal ? [] : ["Resumen", "Repositories"], admin: false, managed: true, mustChangePassword: temporal });
+    }
     return headers.authorization?.startsWith("Bearer ")
       ? json(200, { authenticated: true, roles: [{ id: "scm", name: "Ingeniero SCM" }], sections: ["Resumen", "Repositories"], admin: false })
       : json(401, { error: { name: "AuthenticationError", message: "Missing credentials" } });
@@ -99,6 +115,28 @@ sesionRevocada = true;
 await page.locator(".sidebar nav button", { hasText: "Repositories" }).click({ timeout: 3000 }).catch(() => {});
 await page.waitForSelector("form.login-form", { timeout: 15000 }).catch(() => espera(false, "Sesión perdida: no volvió al formulario"));
 
+// 6. Cuenta con contraseña temporal: tras entrar solo puede elegir una contraseña nueva; después ve sus secciones.
+sesionRevocada = false;
+await page.evaluate(() => sessionStorage.clear());
+await page.goto("http://localhost:5199/");
+await page.waitForSelector("form.login-form", { timeout: 15000 });
+await page.fill('input[autocomplete="username"]', "nuevo.usuario");
+await page.fill('input[type="password"]', "Temporal1234567");
+await page.click('button[type="submit"]');
+await page.waitForSelector("text=Elige tu contraseña", { timeout: 15000 });
+espera((await page.locator(".sidebar nav button").count()) === 0, "Temporal: no debe verse el menú antes de cambiar la contraseña");
+const campos = page.locator('form.login-form input[type="password"]');
+await campos.nth(0).fill("Temporal1234567");
+await campos.nth(1).fill("NuevaClave2026");
+await campos.nth(2).fill("OtraDistinta2026");
+await page.click('button[type="submit"]');
+await page.waitForSelector('[role="alert"]');
+espera((await page.locator('[role="alert"]').innerText()).includes("no coinciden"), "Temporal: falta el aviso de contraseñas distintas");
+await campos.nth(2).fill("NuevaClave2026");
+await page.click('button[type="submit"]');
+await page.waitForSelector(".sidebar nav button", { timeout: 15000 });
+espera((await page.locator(".sidebar").innerText()).includes("Cambiar contraseña"), "Temporal: falta «Cambiar contraseña» en la barra lateral");
+
 espera(errores.length === 0, `Errores no controlados: ${errores.join("; ")}`);
 
 await browser.close();
@@ -107,4 +145,4 @@ if (fallos.length > 0) {
   console.error(`FALLO: ${fallos.length}\n` + fallos.join("\n"));
   process.exit(1);
 }
-console.log("inicio de sesión: 5 escenarios correctos");
+console.log("inicio de sesión: 6 escenarios correctos");

@@ -146,6 +146,16 @@ export async function signIn(username, password) {
   return fresh;
 }
 
+/** Tras cambiar la contraseña, la renovación del token debe usar la nueva (si la sesión empezó en esta pestaña). */
+export function rememberNewPassword(password) {
+  if (!loginHeader) {
+    return;
+  }
+  const text = decodeURIComponent(escape(atob(loginHeader)));
+  const username = text.slice(0, text.indexOf(":"));
+  loginHeader = btoa(unescape(encodeURIComponent(`${username}:${password}`)));
+}
+
 /** Cierra la sesión: olvida el token y la contraseña en memoria. */
 export async function signOut() {
   loginHeader = null;
@@ -286,7 +296,11 @@ const enc = encodeURIComponent;
 export const access = {
   me: () => request("/api/access/me"),
   roles: () => request("/api/access/roles"),
-  users: () => request("/api/access/users")
+  users: () => request("/api/access/users"),
+  createUser: (body) => request("/api/access/users", { method: "POST", body }),
+  updateUser: (username, body) => request(`/api/access/users/${encodeURIComponent(username)}`, { method: "PATCH", body }),
+  resetPassword: (username) => request(`/api/access/users/${encodeURIComponent(username)}/reset-password`, { method: "POST" }),
+  changePassword: (body) => request("/api/access/me/password", { method: "POST", body })
 };
 
 /* Catálogo */

@@ -1,5 +1,5 @@
 import React from "react";
-import { access, SESSION_LOST_EVENT, signIn as startSignIn, signOut as endSignOut, whoAmI } from "./backstage";
+import { access, rememberNewPassword, SESSION_LOST_EVENT, signIn as startSignIn, signOut as endSignOut, whoAmI } from "./backstage";
 
 /** Usuario que está usando GRAVITY (null mientras carga o si no hay identidad). */
 export function useIdentity(version) {
@@ -24,18 +24,29 @@ export function initials(name) {
 }
 
 /**
- * Acceso de la persona: { loading, error, authenticated, roles, sections, admin, signIn, signOut }.
+ * Acceso de la persona: { loading, error, authenticated, roles, sections, admin, managed, mustChangePassword, signIn, signOut, changePassword }.
  * `sections` viene del backend (GET /api/access/me); mientras carga o si falla no se muestra ninguna sección.
  */
+const SIN_ACCESO = { authenticated: false, roles: [], sections: [], admin: false, managed: false, mustChangePassword: false };
+
 export function useAccess() {
-  const [state, setState] = React.useState({ loading: true, error: null, authenticated: false, roles: [], sections: [], admin: false });
+  const [state, setState] = React.useState({ loading: true, error: null, ...SIN_ACCESO });
   const load = React.useCallback(async () => {
     try {
       const me = await access.me();
-      setState({ loading: false, error: null, authenticated: Boolean(me.authenticated), roles: me.roles ?? [], sections: me.sections ?? [], admin: Boolean(me.admin) });
+      setState({
+        loading: false,
+        error: null,
+        authenticated: Boolean(me.authenticated),
+        roles: me.roles ?? [],
+        sections: me.sections ?? [],
+        admin: Boolean(me.admin),
+        managed: Boolean(me.managed),
+        mustChangePassword: Boolean(me.mustChangePassword)
+      });
     } catch (err) {
       // 401: Backstage no reconoce a nadie; es «sin sesión», no un error.
-      setState({ loading: false, error: err.status === 401 ? null : err.message, authenticated: false, roles: [], sections: [], admin: false });
+      setState({ loading: false, error: err.status === 401 ? null : err.message, ...SIN_ACCESO });
     }
   }, []);
   React.useEffect(() => {
@@ -51,5 +62,10 @@ export function useAccess() {
     await endSignOut();
     await load();
   }, [load]);
-  return { ...state, signIn, signOut };
+  const changePassword = React.useCallback(async (currentPassword, newPassword) => {
+    await access.changePassword({ currentPassword, newPassword });
+    rememberNewPassword(newPassword);
+    await load();
+  }, [load]);
+  return { ...state, signIn, signOut, changePassword };
 }

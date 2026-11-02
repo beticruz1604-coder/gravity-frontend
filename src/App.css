@@ -2776,3 +2776,76 @@ td.wrap {
   opacity: 0.6;
   cursor: default;
 }
+
+.password-toggle-link {
+  justify-self: center;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: #6ea8ff;
+  font-size: 13px;
+}
+
+/* ---- Administración de usuarios ---- */
+.user-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.user-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: #b7c3ca;
+}
+
+.user-form input[type="text"] {
+  padding: 9px 11px;
+  border: 1px solid #243540;
+  border-radius: 8px;
+  background: #080f13;
+  color: #e7edf2;
+  font: inherit;
+}
+
+.role-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.role-checks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #d5dde2;
+}
+
+.temp-password {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(47, 127, 255, 0.45);
+  border-radius: 10px;
+  background: rgba(47, 127, 255, 0.08);
+}
+
+.temp-password code {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #080f13;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+
+.user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+

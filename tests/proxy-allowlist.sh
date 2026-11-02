@@ -45,6 +45,15 @@ for p in /backstage/api/auth/guest/refresh /backstage/api/auth/gcpIap/refresh /b
   espera 403 GET "$p"
 done
 espera 200 POST /backstage/api/catalog/locations
+espera 200 POST /backstage/api/access/users
+espera 200 PATCH /backstage/api/access/users/fidencio.santander
+espera 200 POST /backstage/api/access/users/fidencio.santander/reset-password
+espera 200 POST /backstage/api/access/me/password
+espera 403 DELETE /backstage/api/access/users/fidencio.santander
+espera 403 PATCH /backstage/api/access/users/fidencio.santander/../../catalog/entities
+espera 403 POST /backstage/api/access/internal/verify
+espera 403 GET /backstage/api/access/internal/accounts
+espera 403 PUT /backstage/api/access/users/fidencio.santander
 espera 200 POST "/backstage/api/catalog/locations?dryRun=true"
 espera 200 GET /backstage/api/techdocs/metadata/techdocs/default/component/react-app
 espera 200 GET /backstage/api/techdocs/static/docs/default/component/react-app/despliegue/index.html
