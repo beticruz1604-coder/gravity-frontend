@@ -55,11 +55,10 @@ await page.route("**/backstage/**", (route) => {
 });
 
 await page.goto("http://localhost:5199/");
-// Sin sesión (modo abierto) se ve el menú y un botón «Iniciar sesión» que abre el formulario.
-await page.waitForSelector(".sidebar nav button", { timeout: 15000 });
-espera((await page.locator(".sidebar nav button").count()) === 3, "Modo abierto: debía verse el menú completo sin sesión");
-await page.locator(".sidebar button", { hasText: "Iniciar sesión" }).click();
-await page.waitForSelector("form.login-form");
+// Sin sesión lo primero que se ve es el formulario: ni menú ni secciones, aunque el backend deje leer sin sesión.
+await page.waitForSelector("form.login-form", { timeout: 15000 });
+espera((await page.locator(".sidebar nav button").count()) === 0, "Sin sesión no debe verse el menú");
+espera((await page.locator(".dashboard-content .metric-card").count()) === 0, "Sin sesión no debe verse el tablero");
 
 // 1. Contraseña incorrecta: avisa y no entra.
 await page.fill('input[autocomplete="username"]', "ana");
@@ -82,9 +81,10 @@ await page.reload();
 await page.waitForSelector(".sidebar button:has-text('Cerrar sesión')", { timeout: 15000 });
 espera((await page.locator("form.login-form").count()) === 0, "Tras recargar volvió a pedir la contraseña");
 
-// 4. Cerrar sesión vuelve al modo abierto, con el botón «Iniciar sesión».
+// 4. Cerrar sesión vuelve al formulario de inicio de sesión.
 await page.locator(".sidebar button", { hasText: "Cerrar sesión" }).click();
-await page.waitForSelector(".sidebar button:has-text('Iniciar sesión')");
+await page.waitForSelector("form.login-form");
+espera((await page.locator(".sidebar nav button").count()) === 0, "Tras cerrar sesión no debe verse el menú");
 espera(errores.length === 0, `Errores no controlados: ${errores.join("; ")}`);
 
 await browser.close();

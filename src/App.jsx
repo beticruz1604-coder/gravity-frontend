@@ -205,9 +205,9 @@ function normalizePipeline(item = {}) {
 
 /*SIDEBAR*/
 
-function Sidebar({ selectedPage, onNavigate, access, onLogin }) {
+function Sidebar({ selectedPage, onNavigate, access }) {
   const identity = useIdentity(access.authenticated);
-  const visible = menuItems.filter((item) => access.sections.includes(item.name));
+  const visible = INTERACTIVE_SIGN_IN && !access.authenticated ? [] : menuItems.filter((item) => access.sections.includes(item.name));
   return (
     <aside className="sidebar">
       <div className="logo">
@@ -247,13 +247,9 @@ function Sidebar({ selectedPage, onNavigate, access, onLogin }) {
           <div>{identity ? identity.name : "Usuario 1"}</div>
           <small>{access.roles.length ? access.roles.map((r) => r.name).join(", ") : identity ? (identity.groups.map((g) => g.replace(/^group:default\//, "")).join(", ") || "SIN ROL") : "SIN SESIÓN"}</small>
         </div>
-        {INTERACTIVE_SIGN_IN && (
-          <button
-            type="button"
-            className="menu-item"
-            onClick={access.authenticated ? access.signOut : onLogin}
-          >
-            <span>{access.authenticated ? "Cerrar sesión" : "Iniciar sesión"}</span>
+        {INTERACTIVE_SIGN_IN && access.authenticated && (
+          <button type="button" className="menu-item" onClick={access.signOut}>
+            <span>Cerrar sesión</span>
           </button>
         )}
       </div>
@@ -2165,14 +2161,8 @@ function App() {
   const [entityRef, setEntityRef] =
     React.useState(null);
 
-  // Con el acceso sin sesión abierto (modo de migración) el menú se ve igual; «Iniciar sesión» abre el formulario.
-  const [loginOpen, setLoginOpen] = React.useState(false);
-  React.useEffect(() => {
-    if (access.authenticated) {
-      setLoginOpen(false);
-    }
-  }, [access.authenticated]);
-  const needsLogin = !access.authenticated && loginOpen;
+  // Con inicio de sesión de usuario y contraseña, sin sesión solo se ve el formulario (aunque el backend aún deje leer sin sesión).
+  const needsLogin = INTERACTIVE_SIGN_IN && !access.loading && !access.authenticated;
   const blocked = access.loading || access.sections.length === 0 || needsLogin;
   const showPages = !entityRef && !blocked;
 
@@ -2204,7 +2194,6 @@ function App() {
         }
         onNavigate={navigate}
         access={access}
-        onLogin={() => setLoginOpen(true)}
       />
 
       <main className="main">
