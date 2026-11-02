@@ -473,7 +473,9 @@ function BranchField({ definition, required, value, onChange, error, options = {
 
   // Rama de origen calculada: si el tipo de rama solo se crea desde una rama (team y sprint de develop; release y hotfix de
   // master) se elige sola y no se muestra el selector. Solo se elige a mano cuando hay varias (task-resolution).
-  const singleOrigin = options.kind === "base" && state.data && choices.length === 1 ? choices[0].name : undefined;
+  // Se decide por la estrategia (un único tipo de origen), no por las ramas que existan hoy en el repositorio.
+  const originRoles = options.kind === "base" ? rules?.branches.find((b) => b.id === newRole)?.createdFrom : undefined;
+  const singleOrigin = originRoles?.length === 1 && choices.length === 1 ? choices[0].name : undefined;
 
   // Si la selección ya no es válida (cambió el ambiente, el origen o el repositorio) se limpia.
   React.useEffect(() => {

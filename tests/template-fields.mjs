@@ -85,7 +85,10 @@ await context.route("**/backstage/**", (route) => {
   }
   if (url.includes("/api/auth/")) return json({}, 403);
   if (url.includes("filter=kind=template")) return json([template("crear-rama", "Crear una rama", ["branching"]), template("golden-java", "Golden Path: Java", ["golden-path"])]);
-  if (url.includes("filter=kind=component")) return json([svc]);
+  if (url.includes("filter=kind=component")) return json([svc, { ...svc, metadata: { ...svc.metadata, name: "solo", title: "Solo develop" } }]);
+  if (url.includes("/api/branching/branches/demos/solo")) {
+    return json({ branches: [{ name: "master", role: "master", deployTo: [], mergeInto: [] }, { name: "develop", role: "develop", deployTo: [], mergeInto: [] }] });
+  }
   if (/\/api\/catalog\/entities(\?|$)/.test(url) && !url.includes("filter=")) return json([svc]);
   const m = url.match(/template\/([^/]+)\/parameter-schema/);
   if (m) return json(schemas[m[1]]);
@@ -133,13 +136,21 @@ if (await page.locator(".create-modal-body label", { hasText: "Crear a partir de
 
 await fieldOf("Tipo de rama").locator("select").selectOption("task-resolution");
 await page.waitForTimeout(300);
-if (await computed.count()) fail("task-resolution: el origen no se calcula (hay varias ramas posibles)");
+if (await computed.count()) fail("task-resolution: el origen no se calcula (la estrategia admite varios)");
 const fromSelect = fieldOf("Crear a partir de").locator("select");
 if (!(await fromSelect.count())) fail("task-resolution: falta el selector de origen");
 else {
   const opts = await fromSelect.locator("option").allInnerTexts();
   if (!opts.some((o) => o.includes("develop")) || !opts.some((o) => o.includes("team/team-001"))) fail(`task-resolution: opciones inesperadas ${opts.join(", ")}`);
 }
+
+// Aunque el repositorio solo tenga develop, task-resolution se elige a mano: la estrategia admite varios orígenes.
+await fieldOf("Componente").locator("select").selectOption("solo");
+await page.waitForTimeout(500);
+if (await computed.count()) fail("task-resolution con solo develop: no debe calcularse el origen");
+if (!(await fieldOf("Crear a partir de").locator("select").count())) fail("task-resolution con solo develop: falta el selector");
+await fieldOf("Componente").locator("select").selectOption("svc");
+await page.waitForTimeout(300);
 
 // 2) El enlace abre la ficha del catálogo en otra pestaña con la sesión copiada.
 const [popup] = await Promise.all([context.waitForEvent("page"), link.click()]);
