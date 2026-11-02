@@ -113,7 +113,19 @@ if (noRef.trim() !== "—") fail(`sin referencia debe verse un guion y se ve «$
 await page.locator(".homologation-tabs button", { hasText: "Requisitos" }).click();
 await page.waitForSelector(".requirements-view", { timeout: 5000 }).catch(() => {});
 const req = await page.locator(".requirements-view").innerText().catch(() => "");
-for (const t of ["Infraestructura", "Componentes", "Versión aprobada: 1.29, 1.30.", "GKE: Misma versión en todos los ambientes.", "Node/Express"]) if (!req.includes(t)) fail(`Requisitos: falta «${t}»`);
+for (const t of ["Infraestructura", "Componentes", "Versión aprobada: 1.29, 1.30.", "Misma versión en todos los ambientes.", "Node/Express", "Línea base", "Entre ambientes"]) if (!req.includes(t)) fail(`Requisitos: falta «${t}»`);
+// Mismo diseño que las otras pestañas: tabla con buscador, filtro de ámbito y filas desplegables.
+if ((await page.locator(".requirements-table tbody tr").count()) !== 4) fail("Requisitos: debía haber 4 grupos (política, entre ambientes, despliegue y línea base)");
+if (!(await page.locator(".homologation-stat", { hasText: "Requisitos" }).count())) fail("Requisitos: los contadores deben ser de requisitos");
+await page.locator(".requirements-view .reference-toggle", { hasText: "Node/Express" }).click();
+const chips = await page.locator(".requirement-detail .version-ok").allInnerTexts();
+if (!chips.includes("24") || !chips.includes("22")) fail(`Requisitos: la línea base debía mostrar las versiones aprobadas (${chips.join(", ")})`);
+await page.locator(".requirements-view select").selectOption("Infraestructura");
+if ((await page.locator(".requirements-table tbody tr:not(.reference-row)").count()) !== 2) fail("Requisitos: el filtro de ámbito no filtra");
+await page.locator(".requirements-view select").selectOption("Todos los ámbitos");
+await page.locator(".requirements-view input").fill("1.30");
+if ((await page.locator(".requirements-table tbody tr:not(.reference-row)").count()) !== 1) fail("Requisitos: el buscador no encuentra por versión");
+await page.locator(".requirements-view input").fill("");
 
 // Exportar: Excel con tres hojas y CSV con BOM y cabecera.
 const bajar = async (texto) => {

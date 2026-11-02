@@ -29,7 +29,7 @@ espera() { # espera <código> <método> <ruta>
   if [ "$got" != "$1" ]; then echo "FALLO: $2 $3 -> $got (se esperaba $1)"; fallos=$((fallos + 1)); fi
 }
 for p in /backstage/api/catalog/entities "/backstage/api/catalog/entities?filter=kind=component" /backstage/api/catalog/entities/by-name/component/default/x \
-         /backstage/api/access/me /backstage/api/access/roles /backstage/api/access/users /backstage/api/auth/lab/refresh /backstage/api/branching/rules /backstage/api/branching/pipelines/demos /backstage/api/branching/branches/demos/x /backstage/api/homologation/items /backstage/api/homologation/requirements \
+         /backstage/api/access/me /backstage/api/access/roles /backstage/api/access/users /backstage/api/access/products /backstage/api/auth/lab/refresh /backstage/api/branching/rules /backstage/api/branching/pipelines/demos /backstage/api/branching/branches/demos/x /backstage/api/homologation/items /backstage/api/homologation/requirements \
          /backstage/api/homologation/components/x /backstage/api/scaffolder/v2/tasks /backstage/api/scaffolder/v2/tasks/abc/events \
          /backstage/api/scaffolder/v2/templates/default/template/crear-rama/parameter-schema /backstage/api/kubernetes/clusters /backstage/api/scorecards/components; do
   espera 200 GET "$p"
@@ -49,6 +49,8 @@ espera 200 POST /backstage/api/access/users
 espera 200 PATCH /backstage/api/access/users/fidencio.santander
 espera 200 POST /backstage/api/access/users/fidencio.santander/reset-password
 espera 200 POST /backstage/api/access/me/password
+espera 200 POST /backstage/api/access/products
+espera 403 DELETE /backstage/api/access/products
 espera 200 DELETE /backstage/api/access/users/fidencio.santander
 espera 403 DELETE /backstage/api/access/users
 espera 403 PATCH /backstage/api/access/users/fidencio.santander/../../catalog/entities

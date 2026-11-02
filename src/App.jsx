@@ -2252,11 +2252,19 @@ function PlaceholderPage({ title }) {
 
 function App() {
   const access = useAccess();
+  // Enlace directo a una ficha del catálogo (#entidad=component:default/nombre), p. ej. desde una plantilla en otra pestaña.
+  const linkedEntity = React.useMemo(() => {
+    const m = window.location.hash.match(/^#entidad=(.+)$/);
+    if (!m) return null;
+    // Se limpia para que «Volver» y recargar no regresen siempre a la ficha.
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    return decodeURIComponent(m[1]);
+  }, []);
   const [
     requestedPage,
     setSelectedPage
   ] = React.useState(
-    "Resumen"
+    linkedEntity ? "Catálogo" : "Resumen"
   );
   // Solo se muestra una sección que el rol permite; si la pedida no está, la primera disponible.
   const selectedPage = access.sections.includes(requestedPage)
@@ -2264,7 +2272,7 @@ function App() {
     : (access.sections[0] ?? requestedPage);
 
   const [entityRef, setEntityRef] =
-    React.useState(null);
+    React.useState(linkedEntity);
 
   const [changingPassword, setChangingPassword] = React.useState(false);
 

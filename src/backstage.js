@@ -301,7 +301,10 @@ export const access = {
   updateUser: (username, body) => request(`/api/access/users/${encodeURIComponent(username)}`, { method: "PATCH", body }),
   resetPassword: (username) => request(`/api/access/users/${encodeURIComponent(username)}/reset-password`, { method: "POST" }),
   deleteUser: (username) => request(`/api/access/users/${encodeURIComponent(username)}`, { method: "DELETE" }),
-  changePassword: (body) => request("/api/access/me/password", { method: "POST", body })
+  changePassword: (body) => request("/api/access/me/password", { method: "POST", body }),
+  /** Productos de la organización (campo «Producto» de los Golden Paths). */
+  products: () => request("/api/access/products"),
+  addProduct: (name) => request("/api/access/products", { method: "POST", body: { name } })
 };
 
 /* Catálogo */
