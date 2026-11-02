@@ -1102,6 +1102,46 @@ export function ToolsHealthPage() {
 }
 
 /** Control de acceso: roles y qué secciones ve cada uno, y las personas con sus grupos y roles. Solo Admin. */
+const USERNAME_PATTERN = /^[a-z]{2,}\.[a-z]{2,}$/;
+
+/** Casillas de roles; `value` es la lista de ids marcados. */
+function RoleChecks({ roles, value, onChange }) {
+  return (
+    <div className="role-checks">
+      {roles.map((role) => (
+        <label key={role.id} title={role.description}>
+          <input
+            type="checkbox"
+            checked={value.includes(role.id)}
+            onChange={(e) => onChange(e.target.checked ? [...value, role.id] : value.filter((id) => id !== role.id))}
+          />
+          {role.name}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** Contraseña temporal recién generada: se muestra una sola vez. */
+function TemporaryPassword({ username, password, onClose }) {
+  const [copied, setCopied] = React.useState(false);
+  return (
+    <div className="temp-password" role="status">
+      <span>Contraseña temporal de <strong>{username}</strong>:</span>
+      <code>{password}</code>
+      <button
+        type="button"
+        className="link-button"
+        onClick={() => navigator.clipboard?.writeText(password).then(() => setCopied(true))}
+      >
+        {copied ? "Copiada" : "Copiar"}
+      </button>
+      <small>Solo se muestra ahora. Entrégala por un canal privado: al entrar se le pedirá cambiarla.</small>
+      <button type="button" className="link-button" onClick={onClose}>Cerrar</button>
+    </div>
+  );
+}
+
 export function UsersPage() {
   const loader = useData(async () => {
     const [roles, users] = await Promise.all([access.roles(), access.users()]);
@@ -1111,29 +1151,145 @@ export function UsersPage() {
   const sections = loader.data?.roles?.sections ?? [];
   const users = loader.data?.users ?? [];
 
+  const [username, setUsername] = React.useState("");
+  const [displayName, setDisplayName] = React.useState("");
+  const [newRoles, setNewRoles] = React.useState([]);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [issued, setIssued] = React.useState(null);
+  const [editing, setEditing] = React.useState(null);
+  const [editRoles, setEditRoles] = React.useState([]);
+
+  const clean = (err) => err.message.replace(/ \(HTTP \d+\)$/, "");
+  const run = async (action) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      loader.reload();
+    } catch (err) {
+      setError(clean(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const validName = USERNAME_PATTERN.test(username.trim().toLowerCase());
+  const create = (event) => {
+    event.preventDefault();
+    run(async () => {
+      const result = await access.createUser({ username: username.trim().toLowerCase(), displayName: displayName.trim(), roles: newRoles });
+      setIssued({ username: result.user.username, password: result.temporaryPassword });
+      setUsername("");
+      setDisplayName("");
+      setNewRoles([]);
+    });
+  };
+  const saveRoles = (user) =>
+    run(async () => {
+      await access.updateUser(user.username, { roles: editRoles });
+      setEditing(null);
+    });
+  const toggleActive = (user) => run(() => access.updateUser(user.username, { active: !user.active }));
+  const reset = (user) =>
+    run(async () => {
+      const result = await access.resetPassword(user.username);
+      setIssued({ username: user.username, password: result.temporaryPassword });
+    });
+
   return (
     <section className="module-page">
       <Heading
         eyebrow="CONTROL DE ACCESO"
         title="Usuarios"
-        description="Personas, grupos y roles de GRAVITY. El rol sale de los grupos del catálogo y decide qué secciones se muestran; el alta y la baja se hacen en el directorio."
+        description="Alta de personas (nombre.apellido) y sus roles. El rol decide qué secciones ve cada quien y qué puede hacer en las plantillas. Las cuentas fijas de la configuración se muestran pero no se editan aquí."
       />
       <Stats items={[["Usuarios", loader.data ? users.length : "—"], ["Roles", loader.data ? roles.length : "—"], ["Secciones", sections.length || "—"]]} />
       <ErrorBox message={loader.error && `No fue posible consultar el control de acceso. ${loader.error}`} />
 
       <div className="module-panel panel-spaced">
-        <div className="panel-title"><strong>Personas</strong><small>Rol según sus grupos</small></div>
+        <div className="panel-title"><strong>Nuevo usuario</strong><small>Se genera una contraseña temporal</small></div>
+        <form className="user-form" onSubmit={create}>
+          <label>
+            Usuario
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="nombre.apellido" autoComplete="off" required />
+          </label>
+          <label>
+            Nombre para mostrar (opcional)
+            <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Se toma del usuario" />
+          </label>
+          <div>
+            <RoleChecks roles={roles} value={newRoles} onChange={setNewRoles} />
+          </div>
+          <div>
+            <button type="submit" className="create-button" disabled={busy || !validName || newRoles.length === 0}>Crear usuario</button>
+          </div>
+        </form>
+        {username && !validName && (
+          <p className="field-error">Usa la forma nombre.apellido: minúsculas, sin acentos, espacios ni números (p. ej. fidencio.santander).</p>
+        )}
+        {error && <p className="field-error" role="alert">{error}</p>}
+        {issued && <TemporaryPassword username={issued.username} password={issued.password} onClose={() => setIssued(null)} />}
+      </div>
+
+      <div className="module-panel panel-spaced">
+        <div className="panel-title"><strong>Personas</strong><small>Roles y estado de cada cuenta</small></div>
         <div className="table-wrapper">
           <table className="pool-table">
-            <thead><tr><th>Nombre</th><th>Correo</th><th>Roles</th><th>Grupos</th></tr></thead>
+            <thead><tr><th>Usuario</th><th>Nombre</th><th>Roles</th><th>Estado</th><th>Acciones</th></tr></thead>
             <tbody>
-              {users.length === 0 && <EmptyRow colSpan={4} loading={loader.loading}>Sin usuarios.</EmptyRow>}
+              {users.length === 0 && <EmptyRow colSpan={5} loading={loader.loading}>Sin usuarios.</EmptyRow>}
               {users.map((user) => (
                 <tr key={user.entityRef}>
+                  <td>{user.username ?? user.entityRef.replace(/^user:default\//, "")}</td>
                   <td>{user.name}</td>
-                  <td>{user.email ?? "—"}</td>
-                  <td>{user.roles.length ? user.roles.map((role) => role.name).join(", ") : "Sin rol"}</td>
-                  <td>{user.groups.map((group) => group.replace("group:default/", "")).join(", ") || "—"}</td>
+                  <td>
+                    {editing === user.username ? (
+                      <RoleChecks roles={roles} value={editRoles} onChange={setEditRoles} />
+                    ) : user.roles.length ? (
+                      user.roles.map((role) => role.name).join(", ")
+                    ) : (
+                      "Sin rol"
+                    )}
+                  </td>
+                  <td>
+                    {!user.managed
+                      ? "Cuenta fija"
+                      : !user.active
+                        ? "Desactivada"
+                        : user.mustChangePassword
+                          ? "Contraseña temporal"
+                          : "Activa"}
+                  </td>
+                  <td>
+                    {user.managed ? (
+                      <div className="user-actions">
+                        {editing === user.username ? (
+                          <>
+                            <button type="button" className="link-button" disabled={busy || editRoles.length === 0} onClick={() => saveRoles(user)}>Guardar</button>
+                            <button type="button" className="link-button" onClick={() => setEditing(null)}>Cancelar</button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="link-button"
+                            onClick={() => {
+                              setEditing(user.username);
+                              setEditRoles(user.roles.map((role) => role.id));
+                            }}
+                          >
+                            Roles
+                          </button>
+                        )}
+                        <button type="button" className="link-button" disabled={busy} onClick={() => toggleActive(user)}>
+                          {user.active ? "Desactivar" : "Activar"}
+                        </button>
+                        <button type="button" className="link-button" disabled={busy || !user.active} onClick={() => reset(user)}>Restablecer contraseña</button>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

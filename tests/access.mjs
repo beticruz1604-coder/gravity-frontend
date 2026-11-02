@@ -30,6 +30,7 @@ const roles = {
 const users = { users: [{ entityRef: "user:default/ana", name: "Ana Pérez", email: "ana@x.com", groups: ["group:default/scm"], roles: [{ id: "scm", name: "Ingeniero SCM" }], admin: false }] };
 
 const fallos = [];
+const altas = [];
 const espera = (cond, msg) => cond || fallos.push(msg);
 
 const browser = await chromium.launch();
@@ -42,6 +43,10 @@ async function abrir(me) {
     const url = route.request().url();
     if (url.includes("/api/access/me")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(me) });
     if (url.includes("/api/access/roles")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(roles) });
+    if (url.includes("/api/access/users") && route.request().method() === "POST") {
+      altas.push(route.request().postDataJSON());
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ user: { username: "fidencio.santander" }, temporaryPassword: "TempoClave23456x" }) });
+    }
     if (url.includes("/api/access/users")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(users) });
     if (url.includes("/api/auth/")) return route.fulfill({ status: 403, contentType: "application/json", body: "{}" });
     const lista = /entities|tasks|pipelines|agent-pools|branches|policies|repositories|items|components|baseline|clusters/.test(url);
@@ -71,6 +76,16 @@ async function abrir(me) {
   const texto = await page.locator("main").innerText();
   espera(texto.includes("Ana Pérez") && texto.includes("Ingeniero SCM"), "Admin: la tabla de personas no muestra a Ana con su rol");
   espera(texto.includes("Roles y secciones") && texto.includes("Admin (Full Access)"), "Admin: falta la matriz de roles y secciones");
+  // Alta: el usuario debe ser nombre.apellido; con uno inválido el botón queda deshabilitado.
+  await page.fill('input[placeholder="nombre.apellido"]', "Fidencio Santander");
+  espera(await page.locator("button", { hasText: "Crear usuario" }).isDisabled(), "Alta: con usuario inválido se puede crear");
+  espera((await page.locator("main").innerText()).includes("nombre.apellido: minúsculas"), "Alta: falta el aviso de formato");
+  await page.fill('input[placeholder="nombre.apellido"]', "fidencio.santander");
+  await page.locator(".user-form .role-checks label", { hasText: "Ingeniero SCM" }).click();
+  await page.locator("button", { hasText: "Crear usuario" }).click();
+  await page.waitForSelector(".temp-password", { timeout: 5000 }).catch(() => {});
+  espera((await page.locator(".temp-password").innerText().catch(() => "")).includes("TempoClave23456x"), "Alta: no se muestra la contraseña temporal");
+  espera(JSON.stringify(altas[0]) === JSON.stringify({ username: "fidencio.santander", displayName: "", roles: ["scm"] }), `Alta: se envió ${JSON.stringify(altas[0])}`);
   espera(errores.length === 0, `Admin: errores no controlados: ${errores.join("; ")}`);
 }
 

@@ -205,7 +205,7 @@ function normalizePipeline(item = {}) {
 
 /*SIDEBAR*/
 
-function Sidebar({ selectedPage, onNavigate, access }) {
+function Sidebar({ selectedPage, onNavigate, access, onChangePassword }) {
   const identity = useIdentity(access.authenticated);
   const visible = INTERACTIVE_SIGN_IN && !access.authenticated ? [] : menuItems.filter((item) => access.sections.includes(item.name));
   return (
@@ -247,6 +247,11 @@ function Sidebar({ selectedPage, onNavigate, access }) {
           <div>{identity ? identity.name : "Usuario 1"}</div>
           <small>{access.roles.length ? access.roles.map((r) => r.name).join(", ") : identity ? (identity.groups.map((g) => g.replace(/^group:default\//, "")).join(", ") || "SIN ROL") : "SIN SESIÓN"}</small>
         </div>
+        {INTERACTIVE_SIGN_IN && access.authenticated && access.managed && (
+          <button type="button" className="menu-item" onClick={onChangePassword}>
+            <span>Cambiar contraseña</span>
+          </button>
+        )}
         {INTERACTIVE_SIGN_IN && access.authenticated && (
           <button type="button" className="menu-item" onClick={access.signOut}>
             <span>Cerrar sesión</span>
@@ -335,6 +340,68 @@ function LoginScreen({ access }) {
         )}
       </div>
       <small className="login-footer">Pre Production · Coppel-Retail</small>
+    </div>
+  );
+}
+
+/** Cambio de contraseña a pantalla completa: obligatorio con una contraseña temporal, opcional desde la barra lateral. */
+function ChangePasswordScreen({ access, onDone }) {
+  const forced = access.mustChangePassword;
+  const [current, setCurrent] = React.useState("");
+  const [next, setNext] = React.useState("");
+  const [repeat, setRepeat] = React.useState("");
+  const [error, setError] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const submit = (event) => {
+    event.preventDefault();
+    if (next !== repeat) {
+      setError("Las dos contraseñas nuevas no coinciden.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    access
+      .changePassword(current, next)
+      .then(() => onDone?.())
+      .catch((err) => setError(err.message.replace(/ \(HTTP \d+\)$/, "")))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="login-screen">
+      <div className="login-card">
+        <div className="login-brand">
+          <div className="logo-box">A</div>
+          <div>
+            <div className="brand-name">GRAVITY <span className="infinity">∞</span></div>
+            <div className="brand-subtitle">DEVSECOPS INTELLIGENCE PLATFORM</div>
+          </div>
+        </div>
+        <h1>{forced ? "Elige tu contraseña" : "Cambiar contraseña"}</h1>
+        <p className="login-hint">
+          {forced ? "Entraste con una contraseña temporal. Elige una propia para continuar." : "Escribe tu contraseña actual y la nueva."} Al menos 12 caracteres, con letras y números.
+        </p>
+        <form className="login-form" onSubmit={submit}>
+          <label>
+            {forced ? "Contraseña temporal" : "Contraseña actual"}
+            <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" autoFocus required />
+          </label>
+          <label>
+            Contraseña nueva
+            <input type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" minLength={12} required />
+          </label>
+          <label>
+            Repite la contraseña nueva
+            <input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} autoComplete="new-password" minLength={12} required />
+          </label>
+          {error && <p role="alert" className="login-error">{error}</p>}
+          <button type="submit" className="primary-button login-submit" disabled={busy}>{busy ? "Guardando…" : "Guardar contraseña"}</button>
+          {forced ? (
+            <button type="button" className="password-toggle-link" onClick={access.signOut}>Cerrar sesión</button>
+          ) : (
+            <button type="button" className="password-toggle-link" onClick={onDone}>Cancelar</button>
+          )}
+        </form>
+      </div>
     </div>
   );
 }
@@ -2192,6 +2259,8 @@ function App() {
   const [entityRef, setEntityRef] =
     React.useState(null);
 
+  const [changingPassword, setChangingPassword] = React.useState(false);
+
   // Con inicio de sesión de usuario y contraseña, sin sesión solo se ve el formulario (aunque el backend aún deje leer sin sesión).
   const needsLogin = INTERACTIVE_SIGN_IN && !access.loading && !access.authenticated;
   const blocked = access.loading || access.sections.length === 0 || needsLogin;
@@ -2216,6 +2285,9 @@ function App() {
   if (INTERACTIVE_SIGN_IN && !access.authenticated) {
     return <LoginScreen access={access} />;
   }
+  if (access.authenticated && (access.mustChangePassword || changingPassword)) {
+    return <ChangePasswordScreen access={access} onDone={() => setChangingPassword(false)} />;
+  }
 
   return (
     <NavContext.Provider value={navValue}>
@@ -2229,6 +2301,7 @@ function App() {
         }
         onNavigate={navigate}
         access={access}
+        onChangePassword={() => setChangingPassword(true)}
       />
 
       <main className="main">
