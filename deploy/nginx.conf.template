@@ -19,17 +19,11 @@ map $request_method $clave_escritura {
 limit_req_zone $clave_escritura zone=escrituras:10m rate=10r/s;
 
 # ── Credencial hacia Backstage ──────────────────────────────────────────────
-# Si el navegador envía «Authorization: Bearer <token>» (el token de la persona, que Backstage emitió al iniciar sesión) nginx
-# lo reenvía tal cual: Backstage lo valida y así sabe quién es. Sin él, con BACKSTAGE_TOKEN definido (secreto
-# backstage-front-token) nginx usa el token de servicio; sin ninguno de los dos (desarrollo local) no envía credencial.
-# Un token ajeno o falso no da más acceso: Backstage lo rechaza (401) y el front reintenta sin sesión.
-map "${BACKSTAGE_TOKEN}" $token_servicio {
-  ""      "";
-  default "Bearer ${BACKSTAGE_TOKEN}";
-}
+# Solo pasa el «Authorization: Bearer <token>» del navegador (el token de la persona, que Backstage emitió al iniciar sesión):
+# Backstage lo valida y así sabe quién es. Sin él no se envía credencial y Backstage responde 401: el proxy no aporta identidad propia.
 map $http_authorization $backstage_authorization {
   "~^Bearer\ .+" $http_authorization;
-  default        $token_servicio;
+  default        "";
 }
 
 # ── Lista de rutas de Backstage que el front necesita ──────────────────────

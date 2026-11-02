@@ -59,14 +59,13 @@ espera 403 DELETE /backstage/api/catalog/entities/by-uid/x
 espera 403 PUT /backstage/api/scaffolder/v2/tasks
 espera 403 POST /backstage/api/scaffolder/v2/tasks/abc/events
 
-# Credencial hacia Backstage: el Bearer de la persona pasa tal cual; sin él nginx usa BACKSTAGE_TOKEN (servicio); sin ninguno no envía nada.
+# Credencial hacia Backstage: solo pasa el Bearer de la persona; sin él no se envía nada, aunque el contenedor tenga un BACKSTAGE_TOKEN antiguo.
 cuerpo() { docker run --rm --network "$NET" curlimages/curl:8.10.1 -s "$@"; }
 docker run -d --name pxtest-front-token --network "$NET" -e BACKSTAGE_URL=http://pxtest-stub -e BACKSTAGE_HOST=pxtest-stub -e BACKSTAGE_TOKEN=tokenservicio pxtest-front >/dev/null
 sleep 3
-[ "$(cuerpo http://pxtest-front-token:8080/backstage/api/branching/rules)" = "Bearer tokenservicio" ] || { echo "FALLO: con token configurado no se envía Authorization: Bearer <token>"; fallos=$((fallos + 1)); }
+[ -z "$(cuerpo http://pxtest-front-token:8080/backstage/api/branching/rules)" ] || { echo "FALLO: sin sesión no debe enviarse ninguna credencial"; fallos=$((fallos + 1)); }
 [ "$(cuerpo -H 'Authorization: Bearer del-cliente' http://pxtest-front-token:8080/backstage/api/branching/rules)" = "Bearer del-cliente" ] || { echo "FALLO: el token de la persona no llega a Backstage"; fallos=$((fallos + 1)); }
-[ "$(cuerpo -H 'Authorization: Basic abc' http://pxtest-front-token:8080/backstage/api/branching/rules)" = "Bearer tokenservicio" ] || { echo "FALLO: una credencial que no es Bearer no se sustituye por la de servicio"; fallos=$((fallos + 1)); }
-[ "$(cuerpo -H 'Authorization: Bearer del-cliente' http://pxtest-front:8080/backstage/api/branching/rules)" = "Bearer del-cliente" ] || { echo "FALLO: sin token configurado no se deja pasar el del cliente"; fallos=$((fallos + 1)); }
+[ -z "$(cuerpo -H 'Authorization: Basic abc' http://pxtest-front-token:8080/backstage/api/branching/rules)" ] || { echo "FALLO: una credencial que no es Bearer no debe pasar"; fallos=$((fallos + 1)); }
 docker rm -f pxtest-front-token >/dev/null 2>&1
 
 # TLS hacia Backstage: con la CA correcta pasa; con otra CA (o sin CA) no se habla con el servidor y el contenedor ni arranca sin ella.

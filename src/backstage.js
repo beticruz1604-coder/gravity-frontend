@@ -238,15 +238,36 @@ async function requestOnce(path, { method = "GET", body, timeout = 30000 } = {})
 /** Estados que indican que Backstage no estaba disponible un momento, p. ej. al reiniciarse (502/503/504 de nginx). */
 const TRANSIENT = [502, 503, 504];
 
+/** Se emite cuando Backstage rechaza una llamada por falta de sesión: la identidad caducó y hay que volver a entrar. */
+export const SESSION_LOST_EVENT = "gravity:session-lost";
+
+function sessionLost(path) {
+  // /api/access/me es justo quien comprueba la sesión: avisar desde ahí provocaría un bucle.
+  if (path !== "/api/access/me") {
+    window.dispatchEvent(new Event(SESSION_LOST_EVENT));
+  }
+}
+
 /** Las lecturas se reintentan una vez ante una caída breve; las escrituras nunca, para no ejecutar algo dos veces. */
 async function request(path, options = {}) {
   try {
     return await requestOnce(path, options);
   } catch (err) {
     // 401: el token caducó o se revocó. No se ejecutó nada, así que es seguro renovarlo y repetir una vez (también escrituras).
-    if (err.status === 401 && session) {
-      forgetSession();
-      return requestOnce(path, options);
+    if (err.status === 401) {
+      if (session) {
+        forgetSession();
+        try {
+          return await requestOnce(path, options);
+        } catch (retryErr) {
+          if (retryErr.status === 401) {
+            sessionLost(path);
+          }
+          throw retryErr;
+        }
+      }
+      sessionLost(path);
+      throw err;
     }
     const read = (options.method ?? "GET") === "GET";
     const transient = TRANSIENT.includes(err.status) || err.network;
