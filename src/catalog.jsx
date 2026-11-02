@@ -109,7 +109,7 @@ export function yesNo(value) {
 
 /**
  * Clasificación de negocio de una entidad, leída de las anotaciones del catalog-info.yaml:
- *   devops.lab/division (OMS, TMS, WMS o Digital) · devops.lab/initiative (sistema o iniciativa) · devops.lab/legacy · devops.lab/critical
+ *   devops.lab/division (OMS, TMS, WMS o Digital) · devops.lab/initiative (producto de la organización) · devops.lab/legacy · devops.lab/critical
  */
 export function classification(entity) {
   return {
@@ -188,7 +188,7 @@ function EntityLink({ entities, refText }) {
   );
 }
 
-/** Categorías que se clasifican por División / Torre, Sistema / Iniciativa, Legado y Crítico. */
+/** Categorías que se clasifican por División / Torre, Producto, Legado y Crítico. */
 const CLASSIFIED_KINDS = ["Component", "API", "Resource", "System", "Domain"];
 
 const KINDS = ["Component", "API", "Resource", "System", "Domain", "Group", "User", "Template"];
@@ -410,7 +410,7 @@ export function CatalogPage() {
                   {classified && (
                     <>
                       <th>División / Torre</th>
-                      <th>Sistema / Iniciativa</th>
+                      <th>Producto</th>
                       <th>Legado</th>
                       <th>Crítico</th>
                     </>
@@ -526,7 +526,7 @@ function Overview({ entity, entities }) {
           ["Ciclo de vida", entity.spec?.lifecycle],
           ["Propietario", ownerRef ? <EntityLink entities={entities} refText={ownerRef} /> : ownerLabel(entity, entities)],
           ["División / Torre", c.division],
-          ["Sistema / Iniciativa", c.initiative],
+          ["Producto", c.initiative],
           ["Legado", c.legacy && <LegacyValue value={c.legacy} />],
           ["Crítico", c.critical && <CriticalValue value={c.critical} />],
           ["Sistema", partOf.length ? partOf.map((ref) => <EntityLink key={ref} entities={entities} refText={ref} />) : undefined],

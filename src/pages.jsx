@@ -207,45 +207,188 @@ function requirementRows(r) {
   return rows;
 }
 
+/**
+ * Requisitos agrupados como filas de tabla (igual que Infraestructura y Componentes): cada grupo es una política, una
+ * comparación entre ambientes, las reglas de despliegue o la línea base de una tecnología, con sus reglas al desplegarlo.
+ */
+function requirementGroups(r) {
+  if (!r) return [];
+  const infraOrder = r.infrastructure.environments.join(" → ") || "—";
+  const optional = r.infrastructure.optionalEnvironments.length
+    ? `Opcionales mientras no existan: ${r.infrastructure.optionalEnvironments.join(", ")}.`
+    : null;
+  return [
+    ...r.infrastructure.perResource.map((x, i) => ({
+      id: `politica-${i}`,
+      scope: "Infraestructura",
+      kind: "Política de versiones",
+      title: x.type,
+      appliesTo: x.environment ?? "Todos los ambientes",
+      summary: x.rules[0] ?? "—",
+      rules: x.rules.map((text) => ({ text }))
+    })),
+    ...r.infrastructure.betweenEnvironments.map((g) => ({
+      id: `paridad-${g.id ?? g.title}`,
+      scope: "Infraestructura",
+      kind: "Entre ambientes",
+      title: g.title,
+      appliesTo: infraOrder,
+      summary: g.rule ?? `Debe tener ${g.compares} igual en todos los ambientes.`,
+      rules: [
+        { text: `Compara ${g.compares} de los recursos del grupo en cada ambiente.` },
+        { text: g.rule ?? `Debe tener ${g.compares} igual en todos los ambientes.` },
+        { text: `Orden de comparación: ${infraOrder}.` },
+        ...(optional ? [{ text: optional }] : [])
+      ]
+    })),
+    ...(r.components.deployment.length
+      ? [{
+          id: "despliegue",
+          scope: "Componentes",
+          kind: "Despliegue",
+          title: "Despliegue entre ambientes",
+          appliesTo: r.components.environments.join(" → ") || "—",
+          summary: r.components.deployment[0],
+          rules: r.components.deployment.map((text) => ({ text }))
+        }]
+      : []),
+    ...r.components.technologies.map((t) => ({
+      id: `tecnologia-${t.id}`,
+      scope: "Componentes",
+      kind: "Línea base",
+      title: t.title,
+      appliesTo: `Componentes con ${t.detect}`,
+      summary: t.checks.map((c) => `${c.title}: ${c.approved.join(", ") || "—"}`).join(" · ") || "—",
+      rules: t.checks.map((c) => ({ text: c.title, required: c.required, approved: c.approved, review: c.review }))
+    }))
+  ];
+}
+
+const REQUIREMENT_SCOPES = ["Todos los ámbitos", "Infraestructura", "Componentes"];
+
+/** Reglas de un grupo desplegado: frases o, en la línea base, versiones aprobadas y en revisión por tecnología. */
+function RequirementDetail({ group }) {
+  return (
+    <div className="reference-detail requirement-detail">
+      <strong>{group.kind} · {group.title}</strong>
+      <ul className="check-list">
+        {group.rules.map((rule) => (
+          <li key={rule.text}>
+            {rule.approved ? (
+              <>
+                <span className={`check-badge ${rule.required ? "check-info" : "check-neutral"}`}>{rule.required ? "Obligatorio" : "Informativo"}</span>
+                <span className="requirement-versions">
+                  <strong>{rule.text}</strong>
+                  <span className="version-chips">
+                    {rule.approved.map((v) => <span className="version-chip version-ok" key={`a-${v}`} title="Aprobada">{v}</span>)}
+                    {rule.review.map((v) => <span className="version-chip version-review" key={`r-${v}`} title="En revisión: aún válida, hay que planear la salida">{v}</span>)}
+                    {rule.approved.length + rule.review.length === 0 && <span className="status-text status-none">Sin versiones aprobadas</span>}
+                  </span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="check-badge check-info">Regla</span>
+                <span>{rule.text}</span>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+      {group.kind === "Línea base" && (
+        <p className="requirement-legend">
+          <span className="version-chip version-ok">aprobada</span> se homologa ·
+          <span className="version-chip version-review">en revisión</span> aún válida, hay que planear la salida · cualquier otra queda pendiente.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** Pestaña Requisitos: todas las reglas de homologación, de infraestructura y de componentes. */
-function RequirementsView({ loader }) {
-  const r = normalizeRequirements(loader.data);
+function RequirementsView({ loader, groups }) {
+  const [search, setSearch] = React.useState("");
+  const [scope, setScope] = React.useState(REQUIREMENT_SCOPES[0]);
+  const [expanded, setExpanded] = React.useState(() => new Set());
+  const toggle = (id) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  const governance = normalizeRequirements(loader.data)?.governance;
+  const filtered = groups.filter((g) => {
+    const text = `${g.title} ${g.kind} ${g.appliesTo} ${g.rules.map((r) => `${r.text} ${(r.approved ?? []).join(" ")}`).join(" ")}`.toLowerCase();
+    return text.includes(search.toLowerCase()) && (scope === REQUIREMENT_SCOPES[0] || g.scope === scope);
+  });
+
   return (
     <div className="requirements-view">
+      <div className="homologation-toolbar">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar requisito, tecnología o versión..." />
+        <select value={scope} onChange={(e) => setScope(e.target.value)}>
+          {REQUIREMENT_SCOPES.map((option) => <option key={option}>{option}</option>)}
+        </select>
+        <Refresh loader={loader} />
+      </div>
+
       <ErrorBox message={loader.error && `No fue posible consultar los requisitos. ${loader.error}`} />
-      {!r && !loader.error && <p className="requirements-empty">{loader.loading ? "Cargando requisitos…" : "No hay requisitos configurados."}</p>}
-      {r && (
-        <>
-          <details className="requirements-panel" open>
-            <summary>Infraestructura</summary>
-            <h4>Cada recurso, contra su política del ambiente</h4>
-            {r.infrastructure.perResource.length === 0 && <p>No hay políticas de versión configuradas.</p>}
-            {r.infrastructure.perResource.map((x) => (
-              <div key={x.type}><strong>{x.type}</strong><List items={x.rules} /></div>
-            ))}
-            <h4>Entre ambientes</h4>
-            <p>
-              Los ambientes se comparan en este orden: {r.infrastructure.environments.join(" → ") || "—"}
-              {r.infrastructure.optionalEnvironments.length > 0 && ` (opcionales mientras no existan: ${r.infrastructure.optionalEnvironments.join(", ")})`}.
-              Cada grupo se compara con su propia regla:
-            </p>
-            <List items={r.infrastructure.betweenEnvironments.map((g) => `${g.title}: ${g.rule ?? `debe tener ${g.compares} igual en todos los ambientes.`}`)} />
-          </details>
-          <details className="requirements-panel" open>
-            <summary>Componentes</summary>
-            <h4>Despliegue entre ambientes ({r.components.environments.join(" → ")})</h4>
-            <List items={r.components.deployment} />
-            <h4>Línea base por tecnología</h4>
-            {r.components.technologies.map((t) => (
-              <div key={t.id}>
-                <strong>{t.title}</strong> <small>(se detecta por {t.detect})</small>
-                <List items={t.checks.map(technologyRule)} />
-              </div>
-            ))}
-          </details>
-          {r.governance && <p><small>Reglas: {r.governance.detail}</small></p>}
-        </>
-      )}
+
+      <div className="table-wrapper">
+        <table className="pool-table requirements-table">
+          <thead>
+            <tr>
+              <th>Requisito</th>
+              <th>Ámbito</th>
+              <th>Tipo</th>
+              <th>Se aplica a</th>
+              <th>Criterio</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && (
+              <EmptyRow colSpan={5} loading={loader.loading && !loader.data}>
+                {groups.length === 0 ? "No hay requisitos configurados." : "Ningún requisito coincide con la búsqueda."}
+              </EmptyRow>
+            )}
+            {filtered.map((g) => {
+              const open = expanded.has(g.id);
+              return (
+                <React.Fragment key={g.id}>
+                  <tr>
+                    <td>
+                      <button
+                        type="button"
+                        className="reference-toggle"
+                        aria-expanded={open}
+                        title={open ? "Ocultar las reglas" : "Ver todas las reglas"}
+                        onClick={() => toggle(g.id)}
+                      >
+                        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        <span>{g.title}</span>
+                      </button>
+                    </td>
+                    <td><span className={`scope-badge scope-${g.scope === "Infraestructura" ? "infra" : "comp"}`}>{g.scope}</span></td>
+                    <td>{g.kind}</td>
+                    <td>{g.appliesTo}</td>
+                    <td className="wrap">
+                      {g.summary}
+                      {g.rules.length > 1 && <small className="check-count"> · {g.rules.length} reglas</small>}
+                    </td>
+                  </tr>
+                  {open && (
+                    <tr className="reference-row">
+                      <td colSpan={5}><RequirementDetail group={g} /></td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {governance?.detail && <p className="requirements-governance">{governance.detail}</p>}
     </div>
   );
 }
@@ -350,7 +493,7 @@ export function HomologationPage() {
     const text = `${item.name} ${item.type} ${item.version ?? ""} ${item.environment}`.toLowerCase();
     return text.includes(search.toLowerCase()) && (status === "Todos" || item.status === STATUS_ID[status]);
   });
-  const statsOf = tab === "requisitos" ? items : records;
+  const groups = requirementGroups(normalizeRequirements(requirements.data));
 
   const fecha = new Date().toISOString().slice(0, 10);
   const exportar = (format) => {
@@ -387,12 +530,21 @@ export function HomologationPage() {
       />
 
       <Stats
-        items={[
-          ["Elementos registrados", statsOf.length],
-          ["Homologados", statsOf.filter((x) => x.status === "homologado").length],
-          ["Pendientes", statsOf.filter((x) => x.status === "pendiente").length],
-          ["En revisión", statsOf.filter((x) => x.status === "en-revision").length]
-        ]}
+        items={
+          tab === "requisitos"
+            ? [
+                ["Requisitos", groups.length],
+                ["De infraestructura", groups.filter((g) => g.scope === "Infraestructura").length],
+                ["De componentes", groups.filter((g) => g.scope === "Componentes").length],
+                ["Reglas", groups.reduce((n, g) => n + g.rules.length, 0)]
+              ]
+            : [
+                ["Elementos registrados", records.length],
+                ["Homologados", records.filter((x) => x.status === "homologado").length],
+                ["Pendientes", records.filter((x) => x.status === "pendiente").length],
+                ["En revisión", records.filter((x) => x.status === "en-revision").length]
+              ]
+        }
       />
 
       <div className="module-panel">
@@ -403,7 +555,7 @@ export function HomologationPage() {
         </div>
 
         {tab === "requisitos" ? (
-          <RequirementsView loader={requirements} />
+          <RequirementsView loader={requirements} groups={groups} />
         ) : (
           <>
             <div className="homologation-toolbar">

@@ -11,11 +11,13 @@ import {
   GitBranch,
   GitPullRequest,
   Workflow,
-  RotateCcw
+  RotateCcw,
+  Plus
 } from "lucide-react";
 
 import {
   PROJECT,
+  access,
   branching,
   catalog,
   scaffolder,
@@ -29,7 +31,7 @@ import { TASK_STATUS_TEXT, TaskStatus } from "./status";
  *
  *  - TemplateModal: galería de plantillas → formulario → ejecución de la tarea.
  *  - TemplateForm:  renderiza el parameter-schema de Backstage (incluye `dependencies/oneOf`, enumNames y los campos propios
- *                   ComponentPicker, BranchPicker, RepositoryName, PullRequestPreview y OwnerPicker).
+ *                   ComponentPicker, BranchPicker, RepositoryName, PullRequestPreview, OwnerPicker y ProductPicker).
  *  - TaskViewer:    sigue una tarea (estado, pasos, log, enlaces y resumen de salida).
  */
 
@@ -177,7 +179,12 @@ function FieldShell({ definition, required, error, help, children }) {
 const refName = (ref) => String(ref ?? "").split("/").pop();
 const relatedTo = (entity, type) => (entity.relations ?? []).filter((r) => r.type === type).map((r) => refName(r.targetRef));
 
+/** Enlace a la ficha del catálogo en otra pestaña (la sesión se copia a la pestaña nueva), sin perder el formulario. */
+export const entityLink = (entity) =>
+  `#entidad=${encodeURIComponent(`${entity.kind.toLowerCase()}:${entity.metadata.namespace ?? "default"}/${entity.metadata.name}`)}`;
+
 /** Ficha del componente elegido: lo que el catálogo sabe de él, para confirmar que es el que se quiere antes de continuar. */
+
 function ComponentCard({ entity }) {
   const { metadata, spec = {} } = entity;
   const ann = metadata.annotations ?? {};
@@ -194,7 +201,15 @@ function ComponentCard({ entity }) {
   ].filter(([, v]) => v);
   return (
     <div className="preview-box" data-testid="component-card">
-      <strong>{metadata.title ?? metadata.name}</strong>
+      <div className="component-card-title">
+        {/* rel="opener": sin él el navegador no copia la sesión a la pestaña nueva y pediría iniciar sesión otra vez. */}
+        <a href={entityLink(entity)} target="_blank" rel="opener" title="Abrir la ficha del componente en el catálogo (pestaña nueva)">
+          <strong>{metadata.title ?? metadata.name}</strong>
+        </a>
+        <a className="catalog-link" href={entityLink(entity)} target="_blank" rel="opener" data-testid="catalog-link">
+          Ver en el catálogo <ExternalLink size={13} />
+        </a>
+      </div>
       {metadata.description && <p>{metadata.description}</p>}
       <dl className="component-card">
         {rows.map(([label, value]) => (
@@ -247,6 +262,93 @@ function ComponentField({ definition, required, value, onChange, error }) {
       </select>
       {value && items.find((e) => e.metadata.name === value) && (
         <ComponentCard entity={items.find((e) => e.metadata.name === value)} />
+      )}
+    </FieldShell>
+  );
+}
+
+const ADD_PRODUCT = "__agregar__";
+
+/**
+ * Producto de la organización al que pertenece el servicio (Golden Paths). Es una lista propia, no los System del catálogo:
+ * si el producto no está, «Agregar producto» lo da de alta para todos y queda elegido.
+ */
+function ProductField({ definition, required, value, onChange, error }) {
+  const state = useAsync(() => access.products(), []);
+  const [added, setAdded] = React.useState([]);
+  const [adding, setAdding] = React.useState(false);
+  const [draft, setDraft] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState("");
+
+  const names = [
+    ...new Set([...(state.data?.products ?? []).map((p) => p.name), ...added, ...(value ? [value] : [])])
+  ].sort((a, b) => a.localeCompare(b, "es"));
+
+  const save = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      const { product } = await access.addProduct(draft);
+      setAdded((current) => [...current, product.name]);
+      onChange(product.name);
+      setAdding(false);
+      setDraft("");
+    } catch (err) {
+      setSaveError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <FieldShell
+      definition={definition}
+      required={required}
+      error={error || saveError || (state.error && `No se pudo leer la lista de productos: ${state.error}`)}
+      help={state.loading ? "Cargando productos…" : undefined}
+    >
+      <select
+        value={adding ? ADD_PRODUCT : value ?? ""}
+        disabled={state.loading}
+        data-testid="product-select"
+        onChange={(e) => {
+          if (e.target.value === ADD_PRODUCT) {
+            setAdding(true);
+            return;
+          }
+          setAdding(false);
+          onChange(e.target.value || undefined);
+        }}
+      >
+        <option value="">{required ? "Selecciona un producto" : "— Sin producto —"}</option>
+        {names.map((name) => (
+          <option key={name} value={name}>{name}</option>
+        ))}
+        <option value={ADD_PRODUCT}>＋ Agregar producto…</option>
+      </select>
+      {adding && (
+        <div className="inline-add" data-testid="product-add">
+          <input
+            value={draft}
+            autoFocus
+            maxLength={60}
+            placeholder="Nombre del producto, p. ej. Portal de Proveedores"
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (draft.trim()) save();
+              }
+            }}
+          />
+          <button type="button" className="create-primary-button" disabled={saving || draft.trim().length < 2} onClick={save}>
+            {saving ? <Loader2 size={14} className="spin" /> : <Plus size={14} />} Agregar
+          </button>
+          <button type="button" className="create-secondary-button" onClick={() => { setAdding(false); setSaveError(""); }}>
+            Cancelar
+          </button>
+        </div>
       )}
     </FieldShell>
   );
@@ -369,13 +471,37 @@ function BranchField({ definition, required, value, onChange, error, options = {
     choices = source ? valid.filter((b) => b.name !== source.name && source.mergeInto.includes(b.role)) : [];
   }
 
+  // Rama de origen calculada: si el tipo de rama solo se crea desde una rama (team y sprint de develop; release y hotfix de
+  // master) se elige sola y no se muestra el selector. Solo se elige a mano cuando hay varias (task-resolution).
+  const singleOrigin = options.kind === "base" && state.data && choices.length === 1 ? choices[0].name : undefined;
+
   // Si la selección ya no es válida (cambió el ambiente, el origen o el repositorio) se limpia.
   React.useEffect(() => {
+    if (singleOrigin) {
+      if (value !== singleOrigin) onChange(singleOrigin);
+      return;
+    }
     if (state.data && value && !choices.some((c) => c.name === value)) {
       onChange(undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.data, choices.map((c) => c.name).join("|"), value]);
+  }, [state.data, choices.map((c) => c.name).join("|"), value, singleOrigin]);
+
+  // El origen todavía no se puede calcular (falta el componente o el tipo): no se muestra nada.
+  if (options.kind === "base" && (!repo || !newRole) && !state.error) {
+    return null;
+  }
+  if (singleOrigin) {
+    return (
+      <div className="field computed-field" data-testid="computed-origin">
+        <span className="field-label">{definition.title}</span>
+        <div className="computed-value">
+          <GitBranch size={14} /> <code>{singleOrigin}</code>
+        </div>
+        <Help>Se calcula sola: una rama {newRole} siempre se crea a partir de {singleOrigin}.</Help>
+      </div>
+    );
+  }
 
   let help;
   if (state.error) {
@@ -613,6 +739,8 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
       return <ComponentField {...common} />;
     case "OwnerPicker":
       return <OwnerField {...common} />;
+    case "ProductPicker":
+      return <ProductField {...common} />;
     case "RepositoryName":
       return <RepositoryNameField {...common} options={options} onBlock={(message) => onBlock(name, message)} />;
     case "BranchPicker":
