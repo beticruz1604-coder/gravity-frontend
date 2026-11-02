@@ -16,6 +16,8 @@ import {
   GitPullRequest,
   Server,
   Users,
+  KeyRound,
+  LogOut,
   Gauge,
   Clock,
   ChevronDown,
@@ -247,15 +249,20 @@ function Sidebar({ selectedPage, onNavigate, access, onChangePassword }) {
           <div>{identity ? identity.name : "Usuario 1"}</div>
           <small>{access.roles.length ? access.roles.map((r) => r.name).join(", ") : identity ? (identity.groups.map((g) => g.replace(/^group:default\//, "")).join(", ") || "SIN ROL") : "SIN SESIÓN"}</small>
         </div>
-        {INTERACTIVE_SIGN_IN && access.authenticated && access.managed && (
-          <button type="button" className="menu-item" onClick={onChangePassword}>
-            <span>Cambiar contraseña</span>
-          </button>
-        )}
+        {/* Debajo del nombre y a todo lo ancho: en la misma fila no caben dos botones y «Cerrar sesión» quedaba fuera de vista. */}
         {INTERACTIVE_SIGN_IN && access.authenticated && (
-          <button type="button" className="menu-item" onClick={access.signOut}>
-            <span>Cerrar sesión</span>
-          </button>
+          <div className="user-actions-bar">
+            {access.managed && (
+              <button type="button" className="menu-item" onClick={onChangePassword}>
+                <KeyRound size={15} strokeWidth={1.8} />
+                <span>Cambiar contraseña</span>
+              </button>
+            )}
+            <button type="button" className="menu-item" onClick={access.signOut}>
+              <LogOut size={15} strokeWidth={1.8} />
+              <span>Cerrar sesión</span>
+            </button>
+          </div>
         )}
       </div>
     </aside>
