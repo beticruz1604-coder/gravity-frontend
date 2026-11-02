@@ -2804,9 +2804,36 @@ td.wrap {
 /* ---- Administración de usuarios ---- */
 .user-form {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 16px;
   align-items: end;
+  padding: 4px 19px 16px;
+}
+
+@media (max-width: 900px) {
+  .user-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+.user-form-roles {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 14px 12px;
+  border: 1px solid #243540;
+  border-radius: 8px;
+}
+
+.user-form-roles legend {
+  padding: 0 6px;
+  font-size: 13px;
+  color: #b7c3ca;
+}
+
+.user-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .user-form label {
@@ -2817,6 +2844,8 @@ td.wrap {
 }
 
 .user-form input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
   padding: 9px 11px;
   border: 1px solid #243540;
   border-radius: 8px;
@@ -2878,5 +2907,66 @@ td.wrap {
 
 .link-button.danger-link {
   color: #fca5a5;
+}
+
+/* ---- Homologación: detalle por registro, requisitos y exportación ---- */
+.export-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.requirements-view {
+  padding: 8px 18px 4px;
+}
+
+.requirements-empty {
+  color: #8a98a0;
+}
+
+.check-list {
+  list-style: none;
+  margin: 6px 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.check-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.4;
+}
+
+.check-badge {
+  flex: none;
+  min-width: 86px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.check-ok {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.check-fail {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.check-review {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.check-count {
+  display: block;
+  margin-top: 3px;
+  color: #8a98a0;
+  font-size: 11px;
 }
 

@@ -28,6 +28,7 @@ import { TemplateButton } from "./TemplateRunner";
 import { useNav } from "./nav";
 import { PipelineStatus, Percent } from "./status";
 import { ownerLabel } from "./catalog";
+import { csvBlob, download, xlsxBlob } from "./export";
 
 /*
  * Páginas de GRAVITY alimentadas por Backstage. Cada una reutiliza las clases de App.css (module-page, module-panel,
@@ -171,67 +172,144 @@ function List({ items }) {
   return <ul className="requirements-list">{items.map((t) => <li key={t}>{t}</li>)}</ul>;
 }
 
-/** Qué se exige para estar homologado, leído de la configuración que de verdad aplica Backstage. */
-function RequirementsPanel({ tab }) {
-  const loader = useData(() => homologation.requirements(), { interval: 300000 });
-  // La respuesta puede llegar incompleta (backend antiguo, error, objeto vacío): se normaliza para que el panel nunca rompa la pantalla.
-  const raw = loader.data;
-  const r = raw && typeof raw === "object" && raw.infrastructure && raw.components
-    ? {
-        governance: raw.governance && typeof raw.governance === "object" ? raw.governance : null,
-        infrastructure: {
-          environments: raw.infrastructure.environments ?? [],
-          optionalEnvironments: raw.infrastructure.optionalEnvironments ?? [],
-          perResource: raw.infrastructure.perResource ?? [],
-          betweenEnvironments: raw.infrastructure.betweenEnvironments ?? []
-        },
-        components: {
-          environments: raw.components.environments ?? [],
-          deployment: raw.components.deployment ?? [],
-          technologies: raw.components.technologies ?? []
-        }
-      }
-    : null;
+/** Normaliza los requisitos (la respuesta puede llegar incompleta con un backend antiguo o tras un error). */
+function normalizeRequirements(raw) {
+  if (!raw || typeof raw !== "object" || !raw.infrastructure || !raw.components) return null;
+  return {
+    governance: raw.governance && typeof raw.governance === "object" ? raw.governance : null,
+    infrastructure: {
+      environments: raw.infrastructure.environments ?? [],
+      optionalEnvironments: raw.infrastructure.optionalEnvironments ?? [],
+      perResource: raw.infrastructure.perResource ?? [],
+      betweenEnvironments: raw.infrastructure.betweenEnvironments ?? []
+    },
+    components: {
+      environments: raw.components.environments ?? [],
+      deployment: raw.components.deployment ?? [],
+      technologies: raw.components.technologies ?? []
+    }
+  };
+}
+
+const technologyRule = (c) =>
+  `${c.title}${c.required ? "" : " (informativo)"}: aprobadas ${c.approved.join(", ") || "—"}${c.review.length ? ` · en revisión ${c.review.join(", ")}` : ""}`;
+
+/** Todas las reglas de homologación en filas planas: [ámbito, grupo, regla]. Se usa en la pestaña Requisitos y al exportar. */
+function requirementRows(r) {
+  if (!r) return [];
+  const rows = [];
+  for (const x of r.infrastructure.perResource) for (const rule of x.rules) rows.push(["Infraestructura", `Política de versiones · ${x.type}`, rule]);
+  const order = `Orden de los ambientes: ${r.infrastructure.environments.join(" → ") || "—"}${r.infrastructure.optionalEnvironments.length ? ` (opcionales mientras no existan: ${r.infrastructure.optionalEnvironments.join(", ")})` : ""}.`;
+  rows.push(["Infraestructura", "Entre ambientes", order]);
+  for (const g of r.infrastructure.betweenEnvironments) rows.push(["Infraestructura", `Entre ambientes · ${g.title}`, g.rule ?? `Debe tener ${g.compares} igual en todos los ambientes.`]);
+  for (const d of r.components.deployment) rows.push(["Componentes", `Despliegue entre ambientes (${r.components.environments.join(" → ")})`, d]);
+  for (const t of r.components.technologies) for (const c of t.checks) rows.push(["Componentes", `Línea base · ${t.title} (se detecta por ${t.detect})`, technologyRule(c)]);
+  return rows;
+}
+
+/** Pestaña Requisitos: todas las reglas de homologación, de infraestructura y de componentes. */
+function RequirementsView({ loader }) {
+  const r = normalizeRequirements(loader.data);
   return (
-    <details className="requirements-panel">
-      <summary>Requisitos para estar homologado ({tab === "infraestructura" ? "infraestructura" : "componentes"})</summary>
+    <div className="requirements-view">
       <ErrorBox message={loader.error && `No fue posible consultar los requisitos. ${loader.error}`} />
-      {r && tab === "infraestructura" && (
+      {!r && !loader.error && <p className="requirements-empty">{loader.loading ? "Cargando requisitos…" : "No hay requisitos configurados."}</p>}
+      {r && (
         <>
-          <h4>Cada recurso, contra su política del ambiente</h4>
-          {r.infrastructure.perResource.length === 0 && <p>No hay políticas de versión configuradas.</p>}
-          {r.infrastructure.perResource.map((x) => (
-            <div key={x.type}><strong>{x.type}</strong><List items={x.rules} /></div>
-          ))}
-          <h4>Entre ambientes</h4>
-          <p>
-            Los ambientes se comparan en este orden: {r.infrastructure.environments.join(" → ") || "—"}
-            {r.infrastructure.optionalEnvironments.length > 0 && ` (opcionales mientras no existan: ${r.infrastructure.optionalEnvironments.join(", ")})`}.
-            Cada grupo se compara con su propia regla:
-          </p>
-          <List items={r.infrastructure.betweenEnvironments.map((g) => `${g.title}: ${g.rule ?? `debe tener ${g.compares} igual en todos los ambientes.`}`)} />
+          <details className="requirements-panel" open>
+            <summary>Infraestructura</summary>
+            <h4>Cada recurso, contra su política del ambiente</h4>
+            {r.infrastructure.perResource.length === 0 && <p>No hay políticas de versión configuradas.</p>}
+            {r.infrastructure.perResource.map((x) => (
+              <div key={x.type}><strong>{x.type}</strong><List items={x.rules} /></div>
+            ))}
+            <h4>Entre ambientes</h4>
+            <p>
+              Los ambientes se comparan en este orden: {r.infrastructure.environments.join(" → ") || "—"}
+              {r.infrastructure.optionalEnvironments.length > 0 && ` (opcionales mientras no existan: ${r.infrastructure.optionalEnvironments.join(", ")})`}.
+              Cada grupo se compara con su propia regla:
+            </p>
+            <List items={r.infrastructure.betweenEnvironments.map((g) => `${g.title}: ${g.rule ?? `debe tener ${g.compares} igual en todos los ambientes.`}`)} />
+          </details>
+          <details className="requirements-panel" open>
+            <summary>Componentes</summary>
+            <h4>Despliegue entre ambientes ({r.components.environments.join(" → ")})</h4>
+            <List items={r.components.deployment} />
+            <h4>Línea base por tecnología</h4>
+            {r.components.technologies.map((t) => (
+              <div key={t.id}>
+                <strong>{t.title}</strong> <small>(se detecta por {t.detect})</small>
+                <List items={t.checks.map(technologyRule)} />
+              </div>
+            ))}
+          </details>
           {r.governance && <p><small>Reglas: {r.governance.detail}</small></p>}
         </>
       )}
-      {r && tab !== "infraestructura" && (
+    </div>
+  );
+}
+
+const CHECK_LABEL = { cumple: ["Cumple", "check-ok"], "no-cumple": ["No cumple", "check-fail"], "en-revision": ["En revisión", "check-review"] };
+const checksOf = (item) => (Array.isArray(item?.checks) ? item.checks.filter((c) => c && typeof c.title === "string") : []);
+
+/** Detalle desplegable de un registro: qué requisitos cumple y cuáles no, y contra qué se mide. */
+function HomologationDetail({ item }) {
+  const checks = checksOf(item);
+  const reference = referenceOf(item);
+  return (
+    <div className="reference-detail">
+      <strong>Qué cumple y qué no</strong>
+      {checks.length === 0 ? (
+        <p>{item.reason ?? "Sin detalle."}</p>
+      ) : (
+        <ul className="check-list">
+          {checks.map((c) => {
+            const [label, className] = CHECK_LABEL[c.result] ?? [c.result, "check-review"];
+            return (
+              <li key={c.title}>
+                <span className={`check-badge ${className}`}>{label}</span>
+                <span><strong>{c.title}.</strong> {c.detail}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {reference && (
         <>
-          <h4>Despliegue entre ambientes ({r.components.environments.join(" → ")})</h4>
-          <List items={r.components.deployment} />
-          <h4>Línea base por tecnología</h4>
-          {r.components.technologies.map((t) => (
-            <div key={t.id}>
-              <strong>{t.title}</strong> <small>(se detecta por {t.detect})</small>
-              <List
-                items={t.checks.map(
-                  (c) => `${c.title}${c.required ? "" : " (informativo)"}: aprobadas ${c.approved.join(", ") || "—"}${c.review.length ? ` · en revisión ${c.review.join(", ")}` : ""}.`
-                )}
-              />
+          <strong>{REFERENCE_KIND[reference.kind] ?? "Referencia"}</strong>
+          {reference.sections.map((section) => (
+            <div key={section.title}>
+              <h5>{section.title}</h5>
+              <List items={section.items} />
             </div>
           ))}
         </>
       )}
-    </details>
+    </div>
   );
+}
+
+const STATUS_TEXT = { homologado: "Homologado", pendiente: "Pendiente", "en-revision": "En revisión" };
+const EXPORT_COLUMNS = ["Categoría", "Elemento", "Tipo", "Versión", "Ambiente", "Estado", "Cumple", "No cumple", "En revisión", "Homologado con", "Descripción"];
+
+/** Una fila por registro para exportar, con los requisitos agrupados por resultado. */
+function exportRow(item) {
+  const checks = checksOf(item);
+  const by = (result) => checks.filter((c) => c.result === result).map((c) => `${c.title}: ${c.detail}`).join(" | ");
+  return [
+    item.category === "infraestructura" ? "Infraestructura" : "Componentes",
+    item.name,
+    item.type,
+    item.version ?? "",
+    item.environment,
+    STATUS_TEXT[item.status] ?? item.status,
+    by("cumple"),
+    checks.length ? by("no-cumple") : item.status === "homologado" ? "" : (item.reason ?? ""),
+    by("en-revision"),
+    referenceOf(item)?.summary ?? "",
+    item.description ?? ""
+  ];
 }
 
 const REFERENCE_KIND = { politica: "Política de versiones", "linea-base": "Línea base de la tecnología", paridad: "Entre ambientes" };
@@ -249,39 +327,8 @@ function referenceOf(item) {
 }
 
 /** Celda «Homologado con»: contra qué se mide el elemento, con un botón para desplegar el detalle. */
-function ReferenceCell({ item, open, onToggle }) {
-  const reference = referenceOf(item);
-  if (!reference) return <span className="status-text status-none">—</span>;
-  return (
-    <button
-      type="button"
-      className="reference-toggle"
-      aria-expanded={open}
-      title={open ? "Ocultar el detalle" : "Ver con qué está homologado"}
-      onClick={onToggle}
-    >
-      {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-      <span>{reference.summary}</span>
-    </button>
-  );
-}
 
 /** Ventana desplegable bajo la fila: la política, la línea base o la comparación entre ambientes con la que se mide. */
-function ReferenceDetail({ item }) {
-  const reference = referenceOf(item);
-  if (!reference) return null;
-  return (
-    <div className="reference-detail">
-      <strong>{REFERENCE_KIND[reference.kind] ?? "Referencia"}</strong>
-      {reference.sections.map((section) => (
-        <div key={section.title}>
-          <h5>{section.title}</h5>
-          <List items={section.items} />
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export function HomologationPage() {
   const [tab, setTab] = React.useState("infraestructura");
@@ -295,6 +342,7 @@ export function HomologationPage() {
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("Todos");
   const loader = useData(() => homologation.items(), { interval: 60000 });
+  const requirements = useData(() => homologation.requirements(), { interval: 300000 });
 
   const items = loader.data?.items ?? [];
   const records = items.filter((item) => (tab === "infraestructura" ? item.category === "infraestructura" : item.category === "componente"));
@@ -302,7 +350,27 @@ export function HomologationPage() {
     const text = `${item.name} ${item.type} ${item.version ?? ""} ${item.environment}`.toLowerCase();
     return text.includes(search.toLowerCase()) && (status === "Todos" || item.status === STATUS_ID[status]);
   });
-  const count = (id) => records.filter((x) => x.status === id).length;
+  const statsOf = tab === "requisitos" ? items : records;
+
+  const fecha = new Date().toISOString().slice(0, 10);
+  const exportar = (format) => {
+    const rows = items.map(exportRow);
+    if (format === "csv") {
+      download(csvBlob({ columns: EXPORT_COLUMNS, rows }), `homologacion-${fecha}.csv`);
+      return;
+    }
+    const checks = items.flatMap((item) =>
+      checksOf(item).map((c) => [item.category === "infraestructura" ? "Infraestructura" : "Componentes", item.name, item.environment, c.title, CHECK_LABEL[c.result]?.[0] ?? c.result, c.detail])
+    );
+    download(
+      xlsxBlob([
+        { name: "Homologación", columns: EXPORT_COLUMNS, rows },
+        { name: "Comprobaciones", columns: ["Categoría", "Elemento", "Ambiente", "Requisito", "Resultado", "Detalle"], rows: checks },
+        { name: "Requisitos", columns: ["Ámbito", "Grupo", "Regla"], rows: requirementRows(normalizeRequirements(requirements.data)) }
+      ]),
+      `homologacion-${fecha}.xlsx`
+    );
+  };
 
   return (
     <section className="module-page">
@@ -310,14 +378,20 @@ export function HomologationPage() {
         eyebrow="HOMOLOGACIÓN"
         title="Homologation Status"
         description="Estado de homologación de infraestructura (GCP) y de los componentes: línea base tecnológica y paridad entre ambientes."
+        actions={
+          <div className="export-actions">
+            <button type="button" className="create-button" disabled={!items.length} onClick={() => exportar("xlsx")}>Exportar Excel</button>
+            <button type="button" className="create-button" disabled={!items.length} onClick={() => exportar("csv")}>Exportar CSV</button>
+          </div>
+        }
       />
 
       <Stats
         items={[
-          ["Elementos registrados", records.length],
-          ["Homologados", count("homologado")],
-          ["Pendientes", count("pendiente")],
-          ["En revisión", count("en-revision")]
+          ["Elementos registrados", statsOf.length],
+          ["Homologados", statsOf.filter((x) => x.status === "homologado").length],
+          ["Pendientes", statsOf.filter((x) => x.status === "pendiente").length],
+          ["En revisión", statsOf.filter((x) => x.status === "en-revision").length]
         ]}
       />
 
@@ -325,65 +399,85 @@ export function HomologationPage() {
         <div className="homologation-tabs">
           <button className={tab === "infraestructura" ? "selected" : ""} onClick={() => setTab("infraestructura")}>Infraestructura</button>
           <button className={tab === "componentes" ? "selected" : ""} onClick={() => setTab("componentes")}>Componentes</button>
+          <button className={tab === "requisitos" ? "selected" : ""} onClick={() => setTab("requisitos")}>Requisitos</button>
         </div>
 
-        <RequirementsPanel tab={tab} />
+        {tab === "requisitos" ? (
+          <RequirementsView loader={requirements} />
+        ) : (
+          <>
+            <div className="homologation-toolbar">
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar elemento..." />
+              <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                {HOMOLOGATION_STATUS.map((option) => <option key={option}>{option}</option>)}
+              </select>
+              <Refresh loader={loader} />
+            </div>
 
-        <div className="homologation-toolbar">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar elemento..." />
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            {HOMOLOGATION_STATUS.map((option) => <option key={option}>{option}</option>)}
-          </select>
-          <Refresh loader={loader} />
-        </div>
+            <ErrorBox message={loader.error && `No fue posible consultar la homologación. ${loader.error}`} />
+            {(loader.data?.warnings ?? []).map((warning) => (
+              <div className="module-error" key={warning}><AlertTriangle size={16} />{warning}</div>
+            ))}
 
-        <ErrorBox message={loader.error && `No fue posible consultar la homologación. ${loader.error}`} />
-        {(loader.data?.warnings ?? []).map((warning) => (
-          <div className="module-error" key={warning}><AlertTriangle size={16} />{warning}</div>
-        ))}
-
-        <div className="table-wrapper">
-          <table className="pool-table">
-            <thead>
-              <tr>
-                <th>Elemento</th>
-                <th>Versión / Tipo</th>
-                <th>Ambiente</th>
-                <th>Estado</th>
-                <th>Homologado con</th>
-                <th>Motivo (por qué no está homologado)</th>
-                <th>Descripción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <EmptyRow colSpan={7} loading={loader.loading && !loader.data}>No hay información disponible.</EmptyRow>
-              )}
-              {filtered.map((item) => (
-                <React.Fragment key={item.id}>
+            <div className="table-wrapper">
+              <table className="pool-table">
+                <thead>
                   <tr>
-                    <td>{item.name}</td>
-                    <td>{[item.type, item.version].filter(Boolean).join(" · ")}</td>
-                    <td>{item.environment}</td>
-                    <td><StatusBadge status={item.status} /></td>
-                    <td className="wrap"><ReferenceCell item={item} open={expanded.has(item.id)} onToggle={() => toggle(item.id)} /></td>
-                    <td className="wrap" title={item.reason}>
-                      {item.status === "homologado" ? <span className="status-text status-none">—</span> : (item.reason ?? "Sin detalle")}
-                    </td>
-                    <td>{item.description ?? "—"}</td>
+                    <th>Elemento</th>
+                    <th>Versión / Tipo</th>
+                    <th>Ambiente</th>
+                    <th>Estado</th>
+                    <th>Homologado con</th>
+                    <th>Descripción</th>
                   </tr>
-                  {expanded.has(item.id) && (
-                    <tr className="reference-row">
-                      <td colSpan={7}><ReferenceDetail item={item} /></td>
-                    </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 && (
+                    <EmptyRow colSpan={6} loading={loader.loading && !loader.data}>No hay información disponible.</EmptyRow>
                   )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  {filtered.map((item) => {
+                    const open = expanded.has(item.id);
+                    const checks = checksOf(item);
+                    const failing = checks.filter((c) => c.result !== "cumple").length;
+                    return (
+                      <React.Fragment key={item.id}>
+                        <tr>
+                          <td>
+                            <button
+                              type="button"
+                              className="reference-toggle"
+                              aria-expanded={open}
+                              title={open ? "Ocultar el detalle" : "Ver qué cumple y qué no"}
+                              onClick={() => toggle(item.id)}
+                            >
+                              {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                              <span>{item.name}</span>
+                            </button>
+                          </td>
+                          <td>{[item.type, item.version].filter(Boolean).join(" · ")}</td>
+                          <td>{item.environment}</td>
+                          <td>
+                            <StatusBadge status={item.status} />
+                            {checks.length > 0 && <small className="check-count">{failing ? ` ${failing} de ${checks.length} sin cumplir` : ` ${checks.length} de ${checks.length} cumplidos`}</small>}
+                          </td>
+                          <td className="wrap">{referenceOf(item)?.summary ?? <span className="status-text status-none">—</span>}</td>
+                          <td>{item.description ?? "—"}</td>
+                        </tr>
+                        {open && (
+                          <tr className="reference-row">
+                            <td colSpan={6}><HomologationDetail item={item} /></td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
-        <Footer loader={loader} source="Backstage · /api/homologation" />
+        <Footer loader={tab === "requisitos" ? requirements : loader} source={tab === "requisitos" ? "Backstage · /api/homologation/requirements" : "Backstage · /api/homologation"} />
       </div>
     </section>
   );
@@ -1244,10 +1338,11 @@ export function UsersPage() {
             Nombre para mostrar (opcional)
             <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Se toma del usuario" />
           </label>
-          <div>
+          <fieldset className="user-form-roles">
+            <legend>Roles</legend>
             <RoleChecks roles={roles} value={newRoles} onChange={setNewRoles} />
-          </div>
-          <div>
+          </fieldset>
+          <div className="user-form-actions">
             <button type="submit" className="create-button" disabled={busy || !validName || newRoles.length === 0}>Crear usuario</button>
           </div>
         </form>
