@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 NET=${DOCKER_NETWORK:-pxtest-net}
 docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
-cleanup() { docker rm -f pxtest-stub pxtest-front pxtest-front-token pxtest-stub-tls pxtest-front-tls pxtest-front-tls-bad pxtest-front-tls-noca >/dev/null 2>&1; docker volume rm -f pxtest-certs pxtest-certs-bad >/dev/null 2>&1; [ "$NET" = "pxtest-net" ] && docker network rm "$NET" >/dev/null 2>&1; true; }
+cleanup() { docker rm -f pxtest-stub-deny pxtest-front-deny pxtest-front-caido pxtest-stub pxtest-front pxtest-front-token pxtest-stub-tls pxtest-front-tls pxtest-front-tls-bad pxtest-front-tls-noca >/dev/null 2>&1; docker volume rm -f pxtest-certs pxtest-certs-bad >/dev/null 2>&1; [ "$NET" = "pxtest-net" ] && docker network rm "$NET" >/dev/null 2>&1; true; }
 trap cleanup EXIT
 
 docker build -q -t pxtest-front . >/dev/null || { echo "FALLO: no se pudo construir la imagen"; exit 1; }
@@ -68,6 +68,22 @@ sleep 3
 [ -z "$(cuerpo -H 'Authorization: Basic abc' http://pxtest-front-token:8080/backstage/api/branching/rules)" ] || { echo "FALLO: una credencial que no es Bearer no debe pasar"; fallos=$((fallos + 1)); }
 docker rm -f pxtest-front-token >/dev/null 2>&1
 
+# Rol: si Backstage niega la llamada en /api/access/authorize, nginx responde 403 sin llegar a la ruta; si la consulta falla, 503.
+docker build -q -t pxtest-stub-deny - >/dev/null <<'EOS'
+FROM nginx:1.27-alpine
+RUN printf 'server { listen 80; location = /api/access/authorize { return 403; } location / { default_type application/json; return 200 "llego"; } }\n' > /etc/nginx/conf.d/default.conf
+EOS
+docker run -d --name pxtest-stub-deny --network "$NET" pxtest-stub-deny >/dev/null
+docker run -d --name pxtest-front-deny --network "$NET" -e BACKSTAGE_URL=http://pxtest-stub-deny -e BACKSTAGE_HOST=pxtest-stub-deny pxtest-front >/dev/null
+docker run -d --name pxtest-front-caido --network "$NET" -e BACKSTAGE_URL=http://pxtest-stub -e BACKSTAGE_HOST=pxtest-stub pxtest-front >/dev/null
+sleep 3
+[ "$(cuerpo -o /dev/null -w '%{http_code}' http://pxtest-front-deny:8080/backstage/api/branching/rules)" = "403" ] || { echo "FALLO: el 403 del rol no se respeta"; fallos=$((fallos + 1)); }
+cuerpo http://pxtest-front-deny:8080/backstage/api/branching/rules | grep -q "Tu rol no permite" || { echo "FALLO: falta el mensaje del 403 del rol"; fallos=$((fallos + 1)); }
+docker rm -f pxtest-stub >/dev/null 2>&1
+[ "$(cuerpo -o /dev/null -w '%{http_code}' http://pxtest-front-caido:8080/backstage/api/branching/rules)" = "503" ] || { echo "FALLO: con Backstage caído debe responder 503"; fallos=$((fallos + 1)); }
+docker rm -f pxtest-stub-deny pxtest-front-deny pxtest-front-caido >/dev/null 2>&1
+docker run -d --name pxtest-stub --network "$NET" pxtest-stub >/dev/null
+
 # TLS hacia Backstage: con la CA correcta pasa; con otra CA (o sin CA) no se habla con el servidor y el contenedor ni arranca sin ella.
 mkcerts() { # mkcerts <volumen>: CA propia y certificado de servidor (backstage.internal) firmado por ella
   docker volume create "$1" >/dev/null
@@ -86,7 +102,7 @@ docker run -d --name pxtest-front-tls-bad --network "$NET" -v pxtest-certs-bad:/
 docker run -d --name pxtest-front-tls-noca --network "$NET" -e BACKSTAGE_URL=https://backstage-tls -e BACKSTAGE_HOST=backstage-tls pxtest-front >/dev/null
 sleep 5
 [ "$(cuerpo http://pxtest-front-tls:8080/backstage/api/branching/rules)" = "tls-ok" ] || { echo "FALLO: con la CA correcta no se llega a Backstage por TLS"; fallos=$((fallos + 1)); }
-[ "$(docker run --rm --network "$NET" curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' http://pxtest-front-tls-bad:8080/backstage/api/branching/rules)" = "502" ] || { echo "FALLO: con una CA distinta debería dar 502"; fallos=$((fallos + 1)); }
+[ "$(docker run --rm --network "$NET" curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' http://pxtest-front-tls-bad:8080/backstage/api/branching/rules)" = "503" ] || { echo "FALLO: con una CA distinta debería dar 503 (no se habla con el servidor)"; fallos=$((fallos + 1)); }
 [ "$(docker inspect -f '{{.State.Running}}' pxtest-front-tls-noca 2>/dev/null)" = "false" ] || { echo "FALLO: con https y sin CA el contenedor no debería arrancar"; fallos=$((fallos + 1)); }
 
 # Con Backstage apagado el proxy debe fallar rápido (Cloud Run factura el CPU mientras espera una conexión que no llega).

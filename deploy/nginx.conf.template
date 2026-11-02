@@ -55,10 +55,43 @@ server {
   index index.html;
 
   # El navegador llama a /backstage/... y el servidor lo reenvía a Backstage por la red privada (mismo origen, sin CORS).
+  # Backstage decide si el rol de la persona permite esta llamada (GET /api/access/authorize), sin ver el cuerpo.
+  location = /_autorizar {
+    internal;
+    proxy_pass ${BACKSTAGE_URL}/api/access/authorize;
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;
+    include /etc/nginx/snippets/backstage-tls.conf;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header Host ${BACKSTAGE_HOST};
+    proxy_set_header Authorization $backstage_authorization;
+    proxy_set_header X-Original-Uri $uri;
+    proxy_set_header X-Original-Method $request_method;
+    proxy_connect_timeout 3s;
+    proxy_read_timeout 15s;
+  }
+
+  location @sin_permiso {
+    default_type application/json;
+    include /etc/nginx/snippets/security-headers.conf;
+    return 403 '{"error":{"message":"Tu rol no permite esta acción."}}';
+  }
+
+  # Si la consulta anterior falla (VM apagada), nginx daría 500; 503 es lo que el front reintenta como caída breve.
+  location @backstage_no_disponible {
+    default_type application/json;
+    include /etc/nginx/snippets/security-headers.conf;
+    return 503 '{"error":{"message":"Backstage no está disponible."}}';
+  }
+
   location /backstage/ {
     if ($ruta_permitida = 0) {
       return 403;
     }
+    auth_request /_autorizar;
+    error_page 403 = @sin_permiso;
+    error_page 500 = @backstage_no_disponible;
     limit_req zone=lecturas burst=120 nodelay;
     limit_req zone=escrituras burst=20 nodelay;
 
