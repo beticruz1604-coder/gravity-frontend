@@ -188,7 +188,7 @@ function EntityLink({ entities, refText }) {
   );
 }
 
-/** Categorías que se clasifican por División / Torre, Producto, Legado y Crítico. */
+/** Categorías que se clasifican por Dominio / Torre, Producto / Sistema, Legado y Crítico. */
 const CLASSIFIED_KINDS = ["Component", "API", "Resource", "System", "Domain"];
 
 const KINDS = ["Component", "API", "Resource", "System", "Domain", "Group", "User", "Template"];
@@ -406,11 +406,11 @@ export function CatalogPage() {
                 <tr>
                   <th>Nombre</th>
                   <th>Tipo</th>
-                  <th>Propietario</th>
+                  <th>División</th>
                   {classified && (
                     <>
-                      <th>División / Torre</th>
-                      <th>Producto</th>
+                      <th>Dominio / Torre</th>
+                      <th>Producto / Sistema</th>
                       <th>Legado</th>
                       <th>Crítico</th>
                     </>
@@ -524,9 +524,9 @@ function Overview({ entity, entities }) {
         rows={[
           ["Tipo", entity.spec?.type],
           ["Ciclo de vida", entity.spec?.lifecycle],
-          ["Propietario", ownerRef ? <EntityLink entities={entities} refText={ownerRef} /> : ownerLabel(entity, entities)],
-          ["División / Torre", c.division],
-          ["Producto", c.initiative],
+          ["División", ownerRef ? <EntityLink entities={entities} refText={ownerRef} /> : ownerLabel(entity, entities)],
+          ["Dominio / Torre", c.division],
+          ["Producto / Sistema", c.initiative],
           ["Legado", c.legacy && <LegacyValue value={c.legacy} />],
           ["Crítico", c.critical && <CriticalValue value={c.critical} />],
           ["Sistema", partOf.length ? partOf.map((ref) => <EntityLink key={ref} entities={entities} refText={ref} />) : undefined],
