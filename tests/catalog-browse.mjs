@@ -1,4 +1,4 @@
-// Prueba del Catálogo: pestañas (sin Usuarios ni Plantillas), filtros por varias categorías a la vez, clic en los valores de
+// Prueba del Catálogo: pestañas con los nombres de las plantillas (sin Usuarios, Plantillas ni Grupos), filtros por varias categorías a la vez, clic en los valores de
 // la tabla (Dominio / Torre y Producto / Sistema abren su ficha; Legado, Crítico, Tipo y Etiquetas filtran) y la vista que se
 // conserva al volver de una ficha. Sirve dist/ y simula la API.
 import { createRequire } from "node:module";
@@ -20,7 +20,7 @@ const server = http
   })
   .listen(5198);
 
-const group = (name, title) => ({ apiVersion: "backstage.io/v1alpha1", kind: "Group", metadata: { name, namespace: "default" }, spec: { type: "business-unit", profile: { displayName: title } }, relations: [] });
+const group = (name, title, type = "business-unit") => ({ apiVersion: "backstage.io/v1alpha1", kind: "Group", metadata: { name, namespace: "default" }, spec: { type, profile: { displayName: title } }, relations: [] });
 const component = (name, owner, division, initiative, legacy, critical, type, tags) => ({
   apiVersion: "backstage.io/v1alpha1", kind: "Component",
   metadata: {
@@ -38,6 +38,7 @@ const classified = (kind, name, value) => ({
 const entities = [
   group("cadena-de-suministro", "Cadena de Suministro"),
   group("digital", "Digital"),
+  group("admin", "Admin", "team"),
   component("svc-oms", "cadena-de-suministro", "OMS", "CEDIS WEB", "false", "true", "service", ["java", "java-21"]),
   component("svc-wms", "cadena-de-suministro", "WMS", "Test", "true", "true", "service", ["java", "java-17"]),
   component("web-digital", "digital", "Digital", "CEDIS WEB", "false", "false", "website", ["react"]),
@@ -83,9 +84,9 @@ await page.waitForSelector(".sidebar nav button", { timeout: 15000 });
 await page.locator(".sidebar nav button", { hasText: "Catálogo" }).first().click();
 await page.waitForFunction(() => document.querySelectorAll(".pool-table tbody tr").length >= 3, null, { timeout: 15000 });
 
-// 1) Pestañas: sin Usuarios ni Plantillas.
+// 1) Pestañas con los nombres de los campos de las plantillas.
 const tabs = await page.locator(".homologation-tabs button").allInnerTexts();
-if (tabs.join("|") !== "Componentes|APIs|Recursos|Sistemas|Dominios|Grupos|Grafo") fail(`pestañas inesperadas: ${tabs.join(", ")}`);
+if (tabs.join("|") !== "Componentes|APIs|Recursos|División|Dominio / Torre|Producto / Sistema|Grafo") fail(`pestañas inesperadas: ${tabs.join(", ")}`);
 
 // 2) Tipo en español.
 if (!(await page.locator(".pool-table tbody").innerText()).includes("Sitio web")) fail("el tipo website debe verse como «Sitio web»");
@@ -129,13 +130,27 @@ await page.waitForSelector('[data-testid="member-components"]', { timeout: 10000
 if (!(await page.locator(".module-eyebrow").first().innerText()).includes("DOMINIO")) fail("la ficha debía ser de un dominio");
 await page.locator(".back-button").click();
 
-// 7) Pestaña Dominios: el número de componentes lleva a Componentes filtrado por ese dominio.
-await tab("Dominios").click();
+// 7) Pestaña Dominio / Torre: el número de componentes lleva a Componentes filtrado por ese dominio.
+await tab("Dominio / Torre").click();
 const domains = await rowNames();
 if (domains.sort().join(",") !== "Digital,OMS,WMS") fail(`dominios: ${domains.join(",")}`);
 await page.locator(".pool-table tbody tr", { hasText: "OMS" }).locator("td").nth(2).locator("button").click();
 if (!(await tab("Componentes").getAttribute("class"))?.includes("selected")) fail("el número de componentes debía llevar a Componentes");
 if ((await rowNames()).join(",") !== "svc-oms") fail(`componentes del dominio OMS: ${(await rowNames()).join(",")}`);
+await page.locator(".catalog-filter-chips .link-button", { hasText: "Limpiar filtros" }).click();
+
+// 8) Pestaña División: solo las unidades de negocio (no los grupos de roles); su número de componentes filtra por División.
+await tab("División").click();
+const divisions = await rowNames();
+if (divisions.sort().join(",") !== "Cadena de Suministro,Digital") fail(`divisiones: ${divisions.join(",")}`);
+await page.locator(".pool-table tbody tr", { hasText: "Cadena de Suministro" }).locator("td").nth(1).locator("button").click();
+if ((await rowNames()).sort().join(",") !== "svc-oms,svc-wms") fail(`componentes de Cadena de Suministro: ${(await rowNames()).join(",")}`);
+await page.locator(".catalog-filter-chips .link-button", { hasText: "Limpiar filtros" }).click();
+await tab("División").click();
+await page.locator(".pool-table tbody tr td:first-child button", { hasText: "Digital" }).click();
+await page.waitForSelector('[data-testid="member-components"]', { timeout: 10000 }).catch(() => fail("la ficha de la división no lista sus componentes"));
+if (!(await page.locator(".module-eyebrow").first().innerText()).startsWith("DIVISIÓN")) fail("la ficha debía ser de una división");
+if ((await page.locator('[data-testid="member-components"] tbody td:first-child').allInnerTexts()).join(",") !== "web-digital") fail("componentes de la división Digital");
 
 await browser.close();
 server.close();
@@ -143,4 +158,4 @@ if (errors.length > 0) {
   console.error(`FALLO: ${errors.length} problema(s):\n` + errors.slice(0, 10).join("\n"));
   process.exit(1);
 }
-console.log("OK: pestañas, filtros combinados, valores con enlace y vista conservada al volver");
+console.log("OK: pestañas con los nombres de las plantillas, filtros combinados, valores con enlace y vista conservada al volver");

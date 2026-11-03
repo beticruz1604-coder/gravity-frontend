@@ -193,14 +193,21 @@ function EntityLink({ entities, refText }) {
 /** Categorías que se clasifican por Dominio / Torre, Producto / Sistema, Legado y Crítico. */
 const CLASSIFIED_KINDS = ["Component", "API", "Resource"];
 
-/** Pestañas del catálogo. Usuarios y Plantillas no van aquí: se gestionan en Usuarios y en Pipeline Engine. */
-const KINDS = ["Component", "API", "Resource", "System", "Domain", "Group"];
+/**
+ * Pestañas del catálogo, con los nombres de los campos de las plantillas: División (grupos de tipo unidad de negocio), Dominio /
+ * Torre (Domain) y Producto / Sistema (System). Usuarios, Plantillas y los grupos de roles no van aquí: se gestionan en Usuarios
+ * y en Pipeline Engine.
+ */
+const KINDS = ["Component", "API", "Resource", "Division", "Domain", "System"];
+const isDivision = (e) => e.kind === "Group" && e.spec?.type === "business-unit";
+const ofTab = (tab) => (e) => (tab === "Division" ? isDivision(e) : e.kind === tab);
 const KIND_LABEL = {
   Component: "Componentes",
   API: "APIs",
   Resource: "Recursos",
-  System: "Sistemas",
-  Domain: "Dominios",
+  Division: "División",
+  Domain: "Dominio / Torre",
+  System: "Producto / Sistema",
   Group: "Grupos",
   User: "Usuarios",
   Template: "Plantillas"
@@ -210,13 +217,15 @@ const KIND_SINGULAR = {
   Component: "Componente",
   API: "API",
   Resource: "Recurso",
-  System: "Sistema",
-  Domain: "Dominio",
+  System: "Producto / Sistema",
+  Domain: "Dominio / Torre",
   Group: "Grupo",
   User: "Usuario",
   Template: "Plantilla",
   Location: "Ubicación"
 };
+/** Nombre de la clase de una entidad; un grupo de tipo unidad de negocio es una División. */
+const kindName = (e) => (isDivision(e) ? "División" : KIND_SINGULAR[e.kind] ?? e.kind);
 
 /* ----------------------------------------------------------------- Grafo */
 
@@ -366,8 +375,14 @@ function classificationEntity(entities, kind, value) {
   );
 }
 
-/** Componentes de un Domain (por su Dominio / Torre) o de un System (por su Producto / Sistema o por spec.system). */
+/**
+ * Componentes de una División (los que son suyos), de un Domain (por su Dominio / Torre) o de un System (por su Producto /
+ * Sistema o por spec.system).
+ */
 function componentsOf(entity, entities) {
+  if (entity.kind === "Group") {
+    return entities.filter((e) => e.kind === "Component" && (e.relations ?? []).some((r) => r.type === "ownedBy" && r.targetRef === entityRef(entity)));
+  }
   const value = (annotation(entity, "devops.lab/classification-value") ?? entity.metadata.title ?? entity.metadata.name).toLowerCase();
   const key = entity.kind === "Domain" ? "division" : "initiative";
   return entities.filter(
@@ -386,7 +401,8 @@ function filterCategories(kind, entities) {
   const type = { id: "type", label: "Tipo", values: (e) => [typeLabel(e.spec?.type) ?? "—"] };
   const owner = { id: "owner", label: "División", values: (e) => [ownerLabel(e, entities)] };
   const tags = { id: "tags", label: "Etiquetas", values: (e) => e.metadata.tags ?? [] };
-  if (!CLASSIFIED_KINDS.includes(kind)) return kind === "Group" ? [type] : [type, owner, tags];
+  if (kind === "Division") return [];
+  if (!CLASSIFIED_KINDS.includes(kind)) return [owner];
   return [
     type,
     owner,
@@ -436,8 +452,8 @@ export function CatalogPage() {
 
   const entities = loader.data ?? [];
   const classified = CLASSIFIED_KINDS.includes(kind);
-  const grouping = kind === "Domain" || kind === "System";
-  const ofKind = entities.filter((e) => e.kind === kind);
+  const grouping = kind === "Division" || kind === "Domain" || kind === "System";
+  const ofKind = entities.filter(ofTab(kind));
   const categories = filterCategories(kind, entities);
   const matches = (e, except) =>
     categories.every((c) => c.id === except || !(filters[c.id]?.length) || c.values(e).some((v) => filters[c.id].includes(v)));
@@ -485,15 +501,15 @@ export function CatalogPage() {
         <div>
           <span className="module-eyebrow">CATÁLOGO</span>
           <h1>Catálogo</h1>
-          <p>Todas las entidades registradas en Backstage: componentes, APIs, recursos, sistemas, dominios y grupos.</p>
+          <p>Todas las entidades registradas en Backstage: componentes, APIs, recursos, divisiones, dominios / torres y productos / sistemas.</p>
         </div>
       </div>
 
       <div className="homologation-stats">
-        {["Component", "API", "Resource", "System", "Domain"].map((k) => (
+        {KINDS.map((k) => (
           <div className="homologation-stat" key={k}>
             <span>{KIND_LABEL[k]}</span>
-            <strong>{entities.filter((e) => e.kind === k).length}</strong>
+            <strong>{entities.filter(ofTab(k)).length}</strong>
           </div>
         ))}
       </div>
@@ -515,19 +531,19 @@ export function CatalogPage() {
                 <Search size={16} />
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre, descripción o etiqueta..." />
               </div>
-              <button
+              {categories.length > 0 && <button
                 className={`catalog-filter-button${showFilters ? " open" : ""}`}
                 onClick={() => setShowFilters(!showFilters)}
                 aria-expanded={showFilters}
                 data-testid="filter-button"
               >
                 <Filter size={16} /> Filtros{active.length ? ` (${active.length})` : ""}
-              </button>
+              </button>}
               <button className="refresh-module-button" onClick={loader.reload} disabled={loader.loading} title="Actualizar información">
                 <RefreshCw size={16} className={loader.loading ? "spin" : ""} />
               </button>
             </div>
-            {showFilters && <FilterPanel categories={categories} options={options} filters={filters} onToggle={toggle} />}
+            {showFilters && categories.length > 0 && <FilterPanel categories={categories} options={options} filters={filters} onToggle={toggle} />}
             {active.length > 0 && (
               <div className="catalog-filter-chips" data-testid="filter-chips">
                 {active.map(([c, v]) => (
@@ -553,8 +569,6 @@ export function CatalogPage() {
             </div>
             <RelationGraph entities={entities} showOwners={showOwners} />
           </>
-        ) : kind === "Group" ? (
-          <OrganizationTable entities={entities} kind={kind} rows={rows} />
         ) : (
           <div className="table-wrapper">
             <table className="pool-table">
@@ -562,7 +576,7 @@ export function CatalogPage() {
                 <tr>
                   <th>Nombre</th>
                   {!grouping && <th>Tipo</th>}
-                  <th>División</th>
+                  {kind !== "Division" && <th>División</th>}
                   {classified && (
                     <>
                       <th>Dominio / Torre</th>
@@ -586,9 +600,9 @@ export function CatalogPage() {
                   const value = annotation(e, "devops.lab/classification-value") ?? e.metadata.title ?? e.metadata.name;
                   return (
                     <tr key={entityRef(e)}>
-                      <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{e.metadata.title ?? e.metadata.name}</button></td>
+                      <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{displayName(e)}</button></td>
                       {!grouping && <td><FilterValue id="type" value={typeLabel(e.spec?.type)} /></td>}
-                      <td><OwnerLink e={e} /></td>
+                      {kind !== "Division" && <td><OwnerLink e={e} /></td>}
                       {classified && (
                         <>
                           <td><ClassificationLink entityKind="Domain" value={c.division} filterId="division" /></td>
@@ -603,7 +617,9 @@ export function CatalogPage() {
                             <button
                               className="link-button"
                               title="Ver estos componentes"
-                              onClick={() => changeKind("Component", { [kind === "Domain" ? "division" : "initiative"]: [value] })}
+                              onClick={() =>
+                                changeKind("Component", kind === "Division" ? { owner: [ownerLabel({ spec: { owner: entityRef(e) } }, entities)] } : { [kind === "Domain" ? "division" : "initiative"]: [value] })
+                              }
                             >
                               {members.length}
                             </button>
@@ -628,48 +644,6 @@ export function CatalogPage() {
         <div className="module-footer-info"><span>{rows.length} de {ofKind.length}</span><span>Backstage · /api/catalog</span></div>
       </div>
     </section>
-  );
-}
-
-function OrganizationTable({ entities, kind, rows }) {
-  const { openEntity } = useNav();
-  const membersOf = (group) =>
-    (group.relations ?? []).filter((r) => r.type === "hasMember").map((r) => shortRef(r.targetRef));
-
-  return (
-    <div className="table-wrapper">
-      <table className="pool-table">
-        <thead>
-          {kind === "Group" ? (
-            <tr><th>Grupo</th><th>Tipo</th><th>Padre</th><th>Miembros</th><th>Descripción</th></tr>
-          ) : (
-            <tr><th>Usuario</th><th>Nombre</th><th>Correo</th><th>Grupos</th></tr>
-          )}
-        </thead>
-        <tbody>
-          {rows.length === 0 && <tr><td colSpan="5" className="empty-table">Sin entidades.</td></tr>}
-          {rows.map((e) =>
-            kind === "Group" ? (
-              <tr key={entityRef(e)}>
-                <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{displayName(e)}</button></td>
-                <td>{typeLabel(e.spec?.type) ?? "—"}</td>
-                <td>{e.spec?.parent ?? "—"}</td>
-                <td>{membersOf(e).join(", ") || "—"}</td>
-                <td>{e.metadata.description ?? "—"}</td>
-              </tr>
-            ) : (
-              <tr key={entityRef(e)}>
-                <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{e.metadata.name}</button></td>
-                <td>{e.spec?.profile?.displayName ?? "—"}</td>
-                <td>{e.spec?.profile?.email ?? "—"}</td>
-                <td>{(e.relations ?? []).filter((r) => r.type === "memberOf").map((r) => shortRef(r.targetRef)).join(", ") || "—"}</td>
-              </tr>
-            )
-          )}
-        </tbody>
-      </table>
-      <span hidden>{entities.length}</span>
-    </div>
   );
 }
 
@@ -707,14 +681,14 @@ function Overview({ entity, entities }) {
           ["Producto / Sistema", c.initiative && <ClassificationRef entities={entities} kind="System" value={c.initiative} />],
           ["Legado", c.legacy && <LegacyValue value={c.legacy} />],
           ["Crítico", c.critical && <CriticalValue value={c.critical} />],
-          ["Sistema", partOf.length ? partOf.map((ref) => <EntityLink key={ref} entities={entities} refText={ref} />) : undefined],
+          ["Sistema", partOf.length && !c.initiative ? partOf.map((ref) => <EntityLink key={ref} entities={entities} refText={ref} />) : undefined],
           ["Namespace", m.namespace ?? "default"],
           ["Etiquetas", (m.tags ?? []).join(", ")],
           ["Descripción", m.description]
         ]}
       />
 
-      {(entity.kind === "Domain" || entity.kind === "System") && <MemberComponents entity={entity} entities={entities} />}
+      {(entity.kind === "Domain" || entity.kind === "System" || isDivision(entity)) && <MemberComponents entity={entity} entities={entities} />}
 
       {(links.length > 0 || annotation(entity, "backstage.io/view-url")) && (
         <div className="panel-block">
@@ -752,7 +726,7 @@ function ClassificationRef({ entities, kind, value }) {
   return target ? <button className="link-button" onClick={() => openEntity(entityRef(target))}>{value}</button> : <span>{value}</span>;
 }
 
-/** Componentes que pertenecen a un Dominio / Torre o a un Producto / Sistema. */
+/** Componentes que pertenecen a una División, a un Dominio / Torre o a un Producto / Sistema. */
 function MemberComponents({ entity, entities }) {
   const { openEntity } = useNav();
   const members = componentsOf(entity, entities);
@@ -1237,7 +1211,7 @@ export function EntityPage({ reference, onBack }) {
       <button className="pipeline-action back-button" onClick={onBack}><ArrowLeft size={14} /> Volver</button>
       <div className="module-heading">
         <div>
-          <span className="module-eyebrow">{(KIND_SINGULAR[entity.kind] ?? entity.kind).toUpperCase()}{entity.spec?.type ? ` · ${typeLabel(entity.spec.type)}` : ""}</span>
+          <span className="module-eyebrow">{kindName(entity).toUpperCase()}{entity.spec?.type ? ` · ${typeLabel(entity.spec.type)}` : ""}</span>
           <h1>{entity.metadata.title ?? entity.metadata.name}</h1>
           <p>{entity.metadata.description ?? "Sin descripción."}</p>
         </div>
@@ -1295,7 +1269,7 @@ export function GlobalSearch() {
           {results.map((e) => (
             <button key={entityRef(e)} onMouseDown={() => { openEntity(entityRef(e)); setTerm(""); }}>
               <strong>{e.metadata.title ?? e.metadata.name}</strong>
-              <small>{KIND_SINGULAR[e.kind] ?? e.kind}{e.spec?.type ? ` · ${typeLabel(e.spec.type)}` : ""}</small>
+              <small>{kindName(e)}{e.spec?.type ? ` · ${typeLabel(e.spec.type)}` : ""}</small>
             </button>
           ))}
         </div>
