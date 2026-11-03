@@ -8,7 +8,8 @@ import {
   Check,
   X,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  ArrowLeft
 } from "lucide-react";
 
 import {
@@ -17,6 +18,7 @@ import {
   branching,
   catalog,
   homologation,
+  rm,
   scaffolder,
   scorecards,
   annotation,
@@ -1597,6 +1599,296 @@ export function UsersPage() {
             </tbody>
           </table>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------- Release Management */
+
+const RM_KIND = { prevalidacion: "Pre-Validación", preliberacion: "Pre-Liberación" };
+const rmIcon = (r) => (r.passed ? "✅" : r.kind === "prevalidacion" ? "🟠" : "⚠️");
+const rmFlow = (r) => `${r.sourceBranch} → ${r.targetBranch}`;
+
+function RmResult({ report }) {
+  const className = report.passed ? "homologation-approved" : report.kind === "prevalidacion" ? "homologation-review" : "homologation-pending";
+  return <span className={className}>{rmIcon(report)} {report.passed ? "Cumple" : report.kind === "prevalidacion" ? "No candidato" : "Requiere CAB"}</span>;
+}
+
+function RmNotification({ report }) {
+  const n = report.notification;
+  if (!n) return <small>—</small>;
+  return n.sent ? (
+    <span title={`Enviado el ${formatDate(n.at)}`}><Check size={14} /> Enviado</span>
+  ) : (
+    <span title={n.error ?? "No se envió"}><X size={14} /> No enviado</span>
+  );
+}
+
+function RmSection({ icon, title, children }) {
+  return (
+    <div className="rm-report-section">
+      <h3>{icon} {title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function RmFields({ rows }) {
+  return (
+    <table className="rm-report-fields">
+      <tbody>
+        {rows.filter(([, v]) => v !== undefined && v !== null && v !== "").map(([label, value]) => (
+          <tr key={label}><th>{label}</th><td>{value}</td></tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** Informe con el formato de los ejemplos de la propuesta To Be de Release Management. */
+function RmReport({ report: r }) {
+  const m = r.metrics ?? {};
+  const pr = r.pullRequestUrl ? <Link href={r.pullRequestUrl}>#{r.pullRequestId}</Link> : r.pullRequestId ? `#${r.pullRequestId}` : undefined;
+  const evaluated = formatDate(r.createdAt);
+  return (
+    <article className="rm-report" data-testid="rm-report">
+      <header>
+        <span>Reporte_Release_Management</span>
+        <h2>{r.kind === "prevalidacion" ? "🔎 Informe de Pre-Validación de Pull Request" : "🔔 Informe de Pre-Liberación de CI de Release"}</h2>
+      </header>
+      {r.metricsSource === "simulado" && (
+        <div className="rm-report-notice">Métricas de ejemplo: SonarQube y Checkmarx todavía no están conectados.</div>
+      )}
+
+      {r.kind === "prevalidacion" ? (
+        <>
+          <RmSection icon="📌" title="Resultado estimado de liberación">
+            <RmFields
+              rows={[
+                ["Pull Request", <>{rmFlow(r)} {pr && <>· {pr}</>}</>],
+                ["Componente", r.component],
+                ["Autor", r.author?.name],
+                ["Ticket InvGate", r.ticket],
+                ["Fecha de evaluación", evaluated],
+                ["Resultado estimado", <strong key="r">{rmIcon(r)} {r.result}</strong>]
+              ]}
+            />
+          </RmSection>
+          <RmSection icon="📊" title="Indicadores en este punto del flujo">
+            <RmFields
+              rows={[
+                ["Calificación de calidad", m.qualityRating],
+                ["Cobertura de pruebas", `${m.coverage}%`],
+                ["Vulnerabilidades Altas", m.high],
+                ["Vulnerabilidades Medias", m.medium],
+                ["Vulnerabilidades Críticas", m.critical]
+              ]}
+            />
+          </RmSection>
+          <RmSection icon="📋" title="Aclaraciones importantes">
+            <p>Este reporte representa una estimación preliminar. No contempla:</p>
+            <ul>
+              <li>Inspecciones de calidad y seguridad que aún no se ejecutan en ramas posteriores.</li>
+              <li>Integraciones de código que podrían introducir conflictos o vulnerabilidades.</li>
+              <li>Pruebas funcionales o de regresión que se ejecutan en etapas posteriores.</li>
+            </ul>
+            <p><strong>Objetivo:</strong> brindar información temprana a los equipos para mejorar sus entregables y aumentar la probabilidad de autorización automática al llegar a release.</p>
+          </RmSection>
+        </>
+      ) : (
+        <>
+          <RmSection icon="🧩" title="Resumen ejecutivo">
+            <RmFields
+              rows={[
+                ["Componente", r.component],
+                ["Versión", r.version],
+                ["Responsable de release", r.author?.name],
+                ["Pull Request", pr],
+                ["Ticket InvGate", r.ticket],
+                ["Fecha de generación", evaluated]
+              ]}
+            />
+          </RmSection>
+          <RmSection icon="📌" title="Resultado de validación">
+            <p><strong>{rmIcon(r)} {r.result}</strong></p>
+          </RmSection>
+        </>
+      )}
+
+      <RmSection icon="📋" title="Criterios para Cumplimiento para Pasaporte en CI">
+        <table className="rm-report-fields" data-testid="rm-criteria">
+          <thead><tr><th>Criterio</th><th>Valor</th><th>Resultado</th></tr></thead>
+          <tbody>
+            {(r.criteria ?? []).map((c, i) => (
+              <tr key={c.id}>
+                <td>{i + 1} {c.label}</td>
+                <td>{c.value}</td>
+                <td>{c.passed ? "✅ Cumple" : "❌ No cumple"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </RmSection>
+
+      {r.kind === "preliberacion" && (
+        <>
+          <RmSection icon="🔐" title="Resultado de escáneres de seguridad">
+            <code>Críticas: {m.critical} | Altas: {m.high} | Medias: {m.medium} | Bajas: {m.low} | Último escaneo: {m.lastScan ?? "—"}</code>
+          </RmSection>
+          <RmSection icon="📊" title="Calidad">
+            <RmFields rows={[["Calidad del código", m.qualityRating], ["Cobertura de pruebas unitarias", `${m.coverage}%`], ["Pruebas automatizadas", m.tests]]} />
+          </RmSection>
+          <RmSection icon="🛡️" title="Gates">
+            <RmFields rows={[["Quality Gate", m.qualityGate], ["Security Gate", m.securityRating]]} />
+          </RmSection>
+          <RmSection icon="✍️" title="Validación y firma de cumplimiento">
+            <RmFields rows={[["Firma digital / acceso (automático)", "✅ Validado por GRAVITY al crear el pull request"]]} />
+          </RmSection>
+          <RmSection icon="🔀" title="Flujo de cambio">
+            <RmFields rows={[["Origen", r.sourceBranch], ["Destino", r.targetBranch]]} />
+          </RmSection>
+        </>
+      )}
+
+      <RmSection icon="💬" title="Notificación a Google Chat">
+        <p><RmNotification report={r} />{r.notification?.error && !r.notification.sent ? ` · ${r.notification.error}` : ""}</p>
+      </RmSection>
+      <footer>© {new Date(r.createdAt).getFullYear()} GRAVITY · {r.kind === "prevalidacion" ? "Evaluación preliminar automatizada desde el pull request" : "Reporte automatizado generado al crear el pull request hacia master"}</footer>
+    </article>
+  );
+}
+
+function RmReportView({ id, onBack }) {
+  const loader = useData(() => rm.report(id));
+  return (
+    <section className="module-page">
+      <button className="pipeline-action back-button" onClick={onBack}><ArrowLeft size={14} /> Volver al historial</button>
+      <ErrorBox message={loader.error && `No fue posible consultar el informe. ${loader.error}`} />
+      {loader.loading && !loader.data && <div className="empty-table"><Loader2 size={18} className="spin" /> Consultando el informe...</div>}
+      {loader.data && <RmReport report={loader.data} />}
+    </section>
+  );
+}
+
+const RM_PAGE = 50;
+
+/** Historial de informes de Release Management (MongoDB), con filtros y el detalle de cada informe. */
+export function ReleaseManagementPage({ initialReport }) {
+  const [openId, setOpenId] = React.useState(initialReport ?? null);
+  const [filters, setFilters] = React.useState({ kind: "", component: "", passed: "", q: "", from: "", to: "" });
+  const [limit, setLimit] = React.useState(RM_PAGE);
+  const [search, setSearch] = React.useState("");
+  // La búsqueda libre se aplica al dejar de escribir.
+  React.useEffect(() => {
+    const t = setTimeout(() => setFilters((f) => (f.q === search ? f : { ...f, q: search })), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+  const key = JSON.stringify({ ...filters, limit });
+  const loader = useData(() => rm.reports({ ...filters, limit }), { interval: 60000 });
+  const components = useData(() => rm.components().then((r) => r.components).catch(() => []));
+  const reload = loader.reload;
+  // Al cambiar un filtro se vuelve a consultar (la primera carga ya la hace useData).
+  const firstKey = React.useRef(key);
+  React.useEffect(() => {
+    if (firstKey.current === key) return;
+    firstKey.current = null;
+    reload();
+  }, [key, reload]);
+
+  if (openId) return <RmReportView id={openId} onBack={() => { setOpenId(null); loader.reload(); }} />;
+
+  const items = loader.data?.items ?? [];
+  const total = loader.data?.total ?? 0;
+  const set = (name) => (e) => { setLimit(RM_PAGE); setFilters({ ...filters, [name]: e.target.value }); };
+  const active = Object.entries(filters).some(([, v]) => v);
+
+  return (
+    <section className="module-page">
+      <Heading
+        eyebrow="GOBIERNO DE LIBERACIONES"
+        title="Release Management"
+        description="Historial de los informes de Pre-Validación (team/sprint → develop) y Pre-Liberación (release → master) de cada pull request creado desde GRAVITY. Cada informe también se envía al espacio de Google Chat."
+      />
+      <Stats
+        items={[
+          ["Informes", total],
+          ["Pre-Validación", items.filter((r) => r.kind === "prevalidacion").length],
+          ["Pre-Liberación", items.filter((r) => r.kind === "preliberacion").length],
+          ["Cumplen", items.filter((r) => r.passed).length]
+        ]}
+      />
+      <div className="module-panel">
+        <div className="pipeline-toolbar rm-filters" data-testid="rm-filters">
+          <div className="search-input-wrapper">
+            <Search size={16} />
+            <input value={search} onChange={(e) => { setLimit(RM_PAGE); setSearch(e.target.value); }} placeholder="Buscar por componente, autor, rama o ticket..." />
+          </div>
+          <select value={filters.kind} onChange={set("kind")} aria-label="Tipo de informe">
+            <option value="">Todos los tipos</option>
+            <option value="prevalidacion">Pre-Validación</option>
+            <option value="preliberacion">Pre-Liberación</option>
+          </select>
+          <select value={filters.component} onChange={set("component")} aria-label="Componente">
+            <option value="">Todos los componentes</option>
+            {(components.data ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={filters.passed} onChange={set("passed")} aria-label="Resultado">
+            <option value="">Todos los resultados</option>
+            <option value="true">Cumple</option>
+            <option value="false">No cumple</option>
+          </select>
+          <label className="inline-check">Desde <input type="date" value={filters.from} onChange={set("from")} /></label>
+          <label className="inline-check">Hasta <input type="date" value={filters.to} onChange={set("to")} /></label>
+          {active && <button className="link-button" onClick={() => { setSearch(""); setLimit(RM_PAGE); setFilters({ kind: "", component: "", passed: "", q: "", from: "", to: "" }); }}>Limpiar filtros</button>}
+          <Refresh loader={loader} />
+        </div>
+        <ErrorBox message={loader.error && `No fue posible consultar el historial. ${loader.error}`} />
+        <div className="table-wrapper">
+          <table className="pool-table" data-testid="rm-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Informe</th>
+                <th>Componente</th>
+                <th>Flujo</th>
+                <th>Autor</th>
+                <th>Resultado</th>
+                <th>Cobertura</th>
+                <th>Críticas</th>
+                <th>Altas</th>
+                <th>Medias</th>
+                <th>Google Chat</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 && (
+                <EmptyRow colSpan={11} loading={loader.loading && !loader.data}>
+                  {active ? "Ningún informe cumple los filtros." : "Todavía no hay informes. Se generan al integrar cambios de team/sprint hacia develop y de release hacia master."}
+                </EmptyRow>
+              )}
+              {items.map((r) => (
+                <tr key={r.id}>
+                  <td><button className="link-button" onClick={() => setOpenId(r.id)}>{formatDate(r.createdAt)}</button></td>
+                  <td>{RM_KIND[r.kind] ?? r.kind}</td>
+                  <td>{r.component}</td>
+                  <td>{rmFlow(r)}{r.pullRequestId ? <> · <Link href={r.pullRequestUrl}>#{r.pullRequestId}</Link></> : null}</td>
+                  <td>{r.author?.name ?? "—"}</td>
+                  <td title={r.result}><RmResult report={r} /></td>
+                  <td>{r.metrics?.coverage}%</td>
+                  <td>{r.metrics?.critical}</td>
+                  <td>{r.metrics?.high}</td>
+                  <td>{r.metrics?.medium}</td>
+                  <td><RmNotification report={r} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {items.length < total && (
+          <div className="rm-more"><button className="link-button" onClick={() => setLimit(limit + RM_PAGE)}>Ver más ({items.length} de {total})</button></div>
+        )}
+        <Footer loader={loader} source="Backstage · /api/rm/reports · MongoDB" />
       </div>
     </section>
   );

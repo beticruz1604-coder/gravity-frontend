@@ -3201,3 +3201,113 @@ td.wrap {
   content: ", ";
   color: #8d9ab0;
 }
+
+/* Release Management: filtros del historial e informe con el formato de los ejemplos de la propuesta To Be. */
+.rm-filters {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rm-filters select,
+.rm-filters input[type="date"] {
+  padding: 8px 10px;
+  color: #e7edf2;
+  background: #0b141e;
+  border: 1px solid #26344a;
+  border-radius: 8px;
+}
+
+.rm-more {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
+}
+
+.rm-report {
+  max-width: 820px;
+  padding: 22px 26px;
+  color: #e7edf2;
+  background: #2b2b2b;
+  border: 1px solid #3a3a3a;
+  border-radius: 10px;
+}
+
+.rm-report header span {
+  color: #b9c2cc;
+  font-size: 13px;
+}
+
+.rm-report h2 {
+  margin: 8px 0 12px;
+  padding-bottom: 10px;
+  font-size: 22px;
+  border-bottom: 1px solid #8a8a8a;
+}
+
+.rm-report-notice {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  color: #f2c76e;
+  font-size: 12px;
+  background: rgba(242, 199, 110, 0.08);
+  border: 1px solid rgba(242, 199, 110, 0.35);
+  border-radius: 6px;
+}
+
+.rm-report-section {
+  padding: 4px 0 12px;
+  border-bottom: 1px solid #555;
+}
+
+.rm-report-section h3 {
+  margin: 12px 0 8px;
+  font-size: 17px;
+}
+
+.rm-report-section p,
+.rm-report-section li {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.rm-report-section code {
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.rm-report-fields {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.rm-report-fields th,
+.rm-report-fields td {
+  padding: 4px 14px 4px 0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.rm-report-fields tbody th {
+  white-space: nowrap;
+}
+
+.rm-report-fields thead th {
+  text-align: center;
+}
+
+.rm-report footer {
+  padding-top: 12px;
+  color: #b9c2cc;
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .rm-report {
+    padding: 16px;
+  }
+
+  .rm-report-fields tbody th {
+    white-space: normal;
+  }
+}
