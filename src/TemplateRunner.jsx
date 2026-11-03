@@ -189,8 +189,8 @@ function ComponentCard({ entity }) {
   const { metadata, spec = {} } = entity;
   const ann = metadata.annotations ?? {};
   const rows = [
-    ["Propietario", relatedTo(entity, "ownedBy").join(", ") || refName(spec.owner)],
-    ["Sistema", refName(spec.system)],
+    ["División", relatedTo(entity, "ownedBy").join(", ") || refName(spec.owner)],
+    ["Producto / Sistema", refName(spec.system)],
     ["Tipo / ciclo de vida", [spec.type, spec.lifecycle].filter(Boolean).join(" · ")],
     ["Repositorio", ann["dev.azure.com/project-repo"]],
     ["Pipeline", ann["dev.azure.com/build-definition"]],

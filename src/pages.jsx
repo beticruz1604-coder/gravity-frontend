@@ -704,7 +704,7 @@ export function RepositoriesPage() {
               <tr>
                 <th>Componente</th>
                 <th>Tipo</th>
-                <th>Propietario</th>
+                <th>División</th>
                 <th>Nivel</th>
                 <th>Línea base</th>
                 <th>Paridad</th>

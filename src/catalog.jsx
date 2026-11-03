@@ -92,7 +92,7 @@ const shortRef = (ref = "") => ref.replace(/^[a-z]+:default\//i, "");
 const displayName = (entity) => entity.spec?.profile?.displayName ?? entity.metadata.title ?? entity.metadata.name;
 
 /**
- * Nombre del propietario tal como se muestra: el nombre visible del grupo (p. ej. "Cadena de Suministro"), no su
+ * Nombre de la División (dueña del componente) tal como se muestra: el nombre visible del grupo (p. ej. "Cadena de Suministro"), no su
  * identificador técnico (`development`). Si el grupo no está en el catálogo, se usa el identificador.
  */
 export function ownerLabel(entity, entities = []) {
@@ -584,7 +584,7 @@ export function CatalogPage() {
             <div className="pipeline-toolbar">
               <label className="inline-check">
                 <input type="checkbox" checked={showOwners} onChange={(e) => setShowOwners(e.target.checked)} />
-                Mostrar propietarios (grupos)
+                Mostrar divisiones
               </label>
             </div>
             <RelationGraph entities={entities} showOwners={showOwners} />
