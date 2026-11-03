@@ -152,10 +152,25 @@ await page.waitForSelector('[data-testid="member-components"]', { timeout: 10000
 if (!(await page.locator(".module-eyebrow").first().innerText()).startsWith("DIVISIÓN")) fail("la ficha debía ser de una división");
 if ((await page.locator('[data-testid="member-components"] tbody td:first-child').allInnerTexts()).join(",") !== "web-digital") fail("componentes de la división Digital");
 
+await page.locator(".back-button").click();
+
+// 9) En Producto / Sistema y en Dominio / Torre la División son las de sus componentes (no el dueño técnico «admin»).
+await tab("Producto / Sistema").click();
+const divisionOf = async (name) => (await page.locator(".pool-table tbody tr", { hasText: name }).locator("td").nth(1).innerText()).trim();
+if ((await divisionOf("CEDIS WEB")) !== "Cadena de Suministro, Digital") fail(`División de CEDIS WEB: ${await divisionOf("CEDIS WEB")}`);
+if ((await divisionOf("Test")) !== "Cadena de Suministro") fail(`División de Test: ${await divisionOf("Test")}`);
+if ((await page.locator(".pool-table tbody").innerText()).includes("admin")) fail("no debe mostrarse el dueño técnico admin");
+await page.locator('[data-testid="filter-button"]').click();
+await option("División", "Digital").check();
+if ((await rowNames()).join(",") !== "CEDIS WEB") fail(`productos de la división Digital: ${(await rowNames()).join(",")}`);
+await page.locator(".catalog-filter-chips .link-button", { hasText: "Limpiar filtros" }).click();
+await tab("Dominio / Torre").click();
+if ((await divisionOf("WMS")) !== "Cadena de Suministro") fail(`División de WMS: ${await divisionOf("WMS")}`);
+
 await browser.close();
 server.close();
 if (errors.length > 0) {
   console.error(`FALLO: ${errors.length} problema(s):\n` + errors.slice(0, 10).join("\n"));
   process.exit(1);
 }
-console.log("OK: pestañas con los nombres de las plantillas, filtros combinados, valores con enlace y vista conservada al volver");
+console.log("OK: pestañas con los nombres de las plantillas, División calculada, filtros combinados, valores con enlace y vista conservada al volver");

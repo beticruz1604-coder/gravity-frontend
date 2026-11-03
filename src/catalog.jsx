@@ -394,6 +394,20 @@ function componentsOf(entity, entities) {
 }
 
 /**
+ * Divisiones de un Dominio / Torre o de un Producto / Sistema: las de sus componentes (su dueño en Backstage es un dato técnico,
+ * `access.classificationOwner`, no una división). Devuelve las referencias de los grupos, ordenadas por nombre.
+ */
+function memberDivisions(entity, entities) {
+  const refs = new Set();
+  for (const e of componentsOf(entity, entities)) {
+    const ref = (e.relations ?? []).find((r) => r.type === "ownedBy")?.targetRef;
+    if (ref) refs.add(ref);
+  }
+  const label = (ref) => ownerLabel({ spec: { owner: ref } }, entities);
+  return [...refs].sort((a, b) => label(a).localeCompare(label(b), "es"));
+}
+
+/**
  * Categorías por las que se puede filtrar una pestaña. Cada una devuelve los valores de una entidad (una lista: las etiquetas
  * son varias). Dentro de una categoría se suman los valores elegidos; entre categorías deben cumplirse todas.
  */
@@ -402,6 +416,12 @@ function filterCategories(kind, entities) {
   const owner = { id: "owner", label: "División", values: (e) => [ownerLabel(e, entities)] };
   const tags = { id: "tags", label: "Etiquetas", values: (e) => e.metadata.tags ?? [] };
   if (kind === "Division") return [];
+  if (kind === "Domain" || kind === "System") {
+    return [{ id: "owner", label: "División", values: (e) => {
+      const refs = memberDivisions(e, entities);
+      return refs.length ? refs.map((ref) => ownerLabel({ spec: { owner: ref } }, entities)) : ["—"];
+    } }];
+  }
   if (!CLASSIFIED_KINDS.includes(kind)) return [owner];
   return [
     type,
@@ -602,7 +622,9 @@ export function CatalogPage() {
                     <tr key={entityRef(e)}>
                       <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{displayName(e)}</button></td>
                       {!grouping && <td><FilterValue id="type" value={typeLabel(e.spec?.type)} /></td>}
-                      {kind !== "Division" && <td><OwnerLink e={e} /></td>}
+                      {kind !== "Division" && (
+                        <td>{grouping ? <DivisionLinks entities={entities} refs={memberDivisions(e, entities)} /> : <OwnerLink e={e} />}</td>
+                      )}
                       {classified && (
                         <>
                           <td><ClassificationLink entityKind="Domain" value={c.division} filterId="division" /></td>
@@ -676,7 +698,9 @@ function Overview({ entity, entities }) {
         rows={[
           ["Tipo", typeLabel(entity.spec?.type)],
           ["Ciclo de vida", entity.spec?.lifecycle],
-          ["División", ownerRef ? <EntityLink entities={entities} refText={ownerRef} /> : ownerLabel(entity, entities)],
+          ["División", entity.kind === "Domain" || entity.kind === "System"
+            ? <DivisionLinks entities={entities} refs={memberDivisions(entity, entities)} />
+            : ownerRef ? <EntityLink entities={entities} refText={ownerRef} /> : ownerLabel(entity, entities)],
           ["Dominio / Torre", c.division && <ClassificationRef entities={entities} kind="Domain" value={c.division} />],
           ["Producto / Sistema", c.initiative && <ClassificationRef entities={entities} kind="System" value={c.initiative} />],
           ["Legado", c.legacy && <LegacyValue value={c.legacy} />],
@@ -716,6 +740,21 @@ function Overview({ entity, entities }) {
         </div>
       </div>
     </>
+  );
+}
+
+/** Divisiones (enlaces a su ficha) separadas por comas; «—» si no hay ninguna. */
+function DivisionLinks({ entities, refs }) {
+  if (!refs.length) return <span>—</span>;
+  return (
+    <span className="division-links">
+      {refs.map((ref, i) => (
+        <React.Fragment key={ref}>
+          {i > 0 && ", "}
+          <EntityLink entities={entities} refText={ref} />
+        </React.Fragment>
+      ))}
+    </span>
   );
 }
 
