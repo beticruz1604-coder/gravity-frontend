@@ -5,9 +5,11 @@ import {
   AlertTriangle,
   ArrowLeft,
   ExternalLink,
+  Filter,
   Loader2,
   RefreshCw,
-  Search
+  Search,
+  X
 } from "lucide-react";
 
 import {
@@ -189,9 +191,10 @@ function EntityLink({ entities, refText }) {
 }
 
 /** Categorías que se clasifican por Dominio / Torre, Producto / Sistema, Legado y Crítico. */
-const CLASSIFIED_KINDS = ["Component", "API", "Resource", "System", "Domain"];
+const CLASSIFIED_KINDS = ["Component", "API", "Resource"];
 
-const KINDS = ["Component", "API", "Resource", "System", "Domain", "Group", "User", "Template"];
+/** Pestañas del catálogo. Usuarios y Plantillas no van aquí: se gestionan en Usuarios y en Pipeline Engine. */
+const KINDS = ["Component", "API", "Resource", "System", "Domain", "Group"];
 const KIND_LABEL = {
   Component: "Componentes",
   API: "APIs",
@@ -201,6 +204,18 @@ const KIND_LABEL = {
   Group: "Grupos",
   User: "Usuarios",
   Template: "Plantillas"
+};
+
+const KIND_SINGULAR = {
+  Component: "Componente",
+  API: "API",
+  Resource: "Recurso",
+  System: "Sistema",
+  Domain: "Dominio",
+  Group: "Grupo",
+  User: "Usuario",
+  Template: "Plantilla",
+  Location: "Ubicación"
 };
 
 /* ----------------------------------------------------------------- Grafo */
@@ -319,24 +334,150 @@ export function RelationGraph({ entities, focus, showOwners }) {
 
 /* --------------------------------------------------------------- Catálogo */
 
+/** Nombre en español del tipo (spec.type); un tipo que no está aquí se muestra tal cual. */
+const TYPE_LABEL = {
+  service: "Servicio",
+  website: "Sitio web",
+  library: "Librería",
+  openapi: "OpenAPI",
+  asyncapi: "AsyncAPI",
+  graphql: "GraphQL",
+  grpc: "gRPC",
+  "storage-bucket": "Bucket",
+  "container-registry": "Registro de contenedores",
+  network: "Red",
+  subnet: "Subred",
+  database: "Base de datos",
+  team: "Equipo",
+  "business-unit": "Unidad de negocio"
+};
+export const typeLabel = (type) => (type ? TYPE_LABEL[type] ?? type : undefined);
+
+/** Entidad Domain o System que corresponde a un valor de la clasificación (Dominio / Torre o Producto / Sistema). */
+function classificationEntity(entities, kind, value) {
+  if (!value) return undefined;
+  const v = String(value).trim().toLowerCase();
+  return entities.find(
+    (e) =>
+      e.kind === kind &&
+      [annotation(e, "devops.lab/classification-value"), e.metadata.title, e.metadata.name]
+        .filter(Boolean)
+        .some((x) => String(x).trim().toLowerCase() === v)
+  );
+}
+
+/** Componentes de un Domain (por su Dominio / Torre) o de un System (por su Producto / Sistema o por spec.system). */
+function componentsOf(entity, entities) {
+  const value = (annotation(entity, "devops.lab/classification-value") ?? entity.metadata.title ?? entity.metadata.name).toLowerCase();
+  const key = entity.kind === "Domain" ? "division" : "initiative";
+  return entities.filter(
+    (e) =>
+      e.kind === "Component" &&
+      ((classification(e)[key] ?? "").trim().toLowerCase() === value ||
+        (entity.kind === "System" && (e.relations ?? []).some((r) => r.type === "partOf" && r.targetRef === entityRef(entity))))
+  );
+}
+
+/**
+ * Categorías por las que se puede filtrar una pestaña. Cada una devuelve los valores de una entidad (una lista: las etiquetas
+ * son varias). Dentro de una categoría se suman los valores elegidos; entre categorías deben cumplirse todas.
+ */
+function filterCategories(kind, entities) {
+  const type = { id: "type", label: "Tipo", values: (e) => [typeLabel(e.spec?.type) ?? "—"] };
+  const owner = { id: "owner", label: "División", values: (e) => [ownerLabel(e, entities)] };
+  const tags = { id: "tags", label: "Etiquetas", values: (e) => e.metadata.tags ?? [] };
+  if (!CLASSIFIED_KINDS.includes(kind)) return kind === "Group" ? [type] : [type, owner, tags];
+  return [
+    type,
+    owner,
+    { id: "division", label: "Dominio / Torre", values: (e) => [classification(e).division ?? "—"] },
+    { id: "initiative", label: "Producto / Sistema", values: (e) => [classification(e).initiative ?? "—"] },
+    { id: "legacy", label: "Legado", values: (e) => [classification(e).legacy ?? "—"] },
+    { id: "critical", label: "Crítico", values: (e) => [classification(e).critical ?? "—"] },
+    tags
+  ];
+}
+
+/** La pestaña, la búsqueda y los filtros se conservan al abrir una ficha y volver. */
+const catalogView = { kind: "Component", search: "", filters: {} };
+
+function FilterPanel({ categories, options, filters, onToggle }) {
+  return (
+    <div className="catalog-filter-panel" data-testid="filter-panel">
+      {categories.map((c) =>
+        options[c.id].length === 0 ? null : (
+          <fieldset key={c.id}>
+            <legend>{c.label}</legend>
+            {options[c.id].map(([value, count]) => (
+              <label key={value} className="inline-check">
+                <input type="checkbox" checked={(filters[c.id] ?? []).includes(value)} onChange={() => onToggle(c.id, value)} />
+                {value} <small>{count}</small>
+              </label>
+            ))}
+          </fieldset>
+        )
+      )}
+    </div>
+  );
+}
+
 export function CatalogPage() {
   const { openEntity } = useNav();
   const loader = useEntities();
   useAutoRefresh(loader.reload);
-  const [kind, setKind] = React.useState("Component");
-  const [search, setSearch] = React.useState("");
-  const [type, setType] = React.useState("Todos");
+  const [kind, setKindState] = React.useState(catalogView.kind);
+  const [search, setSearchState] = React.useState(catalogView.search);
+  const [filters, setFiltersState] = React.useState(catalogView.filters);
+  const [showFilters, setShowFilters] = React.useState(false);
   const [showOwners, setShowOwners] = React.useState(false);
+  const setKind = (k) => { catalogView.kind = k; setKindState(k); };
+  const setSearch = (s) => { catalogView.search = s; setSearchState(s); };
+  const setFilters = (f) => { catalogView.filters = f; setFiltersState(f); };
 
   const entities = loader.data ?? [];
   const classified = CLASSIFIED_KINDS.includes(kind);
+  const grouping = kind === "Domain" || kind === "System";
   const ofKind = entities.filter((e) => e.kind === kind);
-  const types = [...new Set(ofKind.map((e) => e.spec?.type).filter(Boolean))];
-  const rows = ofKind.filter((e) => {
+  const categories = filterCategories(kind, entities);
+  const matches = (e, except) =>
+    categories.every((c) => c.id === except || !(filters[c.id]?.length) || c.values(e).some((v) => filters[c.id].includes(v)));
+  const textOf = (e) => {
     const c = classification(e);
-    const text = `${e.metadata.name} ${e.metadata.title ?? ""} ${e.metadata.description ?? ""} ${(e.metadata.tags ?? []).join(" ")} ${ownerLabel(e, entities)} ${c.division ?? ""} ${c.initiative ?? ""}`.toLowerCase();
-    return text.includes(search.toLowerCase()) && (type === "Todos" || e.spec?.type === type);
-  });
+    return `${e.metadata.name} ${e.metadata.title ?? ""} ${e.metadata.description ?? ""} ${(e.metadata.tags ?? []).join(" ")} ${ownerLabel(e, entities)} ${c.division ?? ""} ${c.initiative ?? ""} ${typeLabel(e.spec?.type) ?? ""}`.toLowerCase();
+  };
+  const searched = ofKind.filter((e) => textOf(e).includes(search.toLowerCase()));
+  const rows = searched.filter((e) => matches(e));
+  // Opciones de cada categoría con cuántas entidades quedarían, teniendo en cuenta los demás filtros.
+  const options = Object.fromEntries(
+    categories.map((c) => {
+      const counts = new Map();
+      for (const e of searched.filter((x) => matches(x, c.id))) for (const v of new Set(c.values(e))) counts.set(v, (counts.get(v) ?? 0) + 1);
+      for (const v of filters[c.id] ?? []) if (!counts.has(v)) counts.set(v, 0);
+      return [c.id, [...counts.entries()].sort((a, b) => (a[0] === "—") - (b[0] === "—") || a[0].localeCompare(b[0], "es"))];
+    })
+  );
+  const active = categories.flatMap((c) => (filters[c.id] ?? []).map((v) => [c, v]));
+  const toggle = (id, value) => {
+    const current = filters[id] ?? [];
+    setFilters({ ...filters, [id]: current.includes(value) ? current.filter((v) => v !== value) : [...current, value] });
+  };
+  /** Clic en un valor de la tabla: deja solo ese valor en su categoría. */
+  const only = (id, value) => setFilters({ ...filters, [id]: [value] });
+  const changeKind = (k, f = {}) => { setKind(k); setFilters(f); };
+
+  const FilterValue = ({ id, value, children }) =>
+    value === undefined || value === null || value === "—" ? (children ?? <span>—</span>) : (
+      <button className="link-button" title="Filtrar por este valor" onClick={() => only(id, value)}>{children ?? value}</button>
+    );
+  const ClassificationLink = ({ entityKind, value, filterId }) => {
+    const target = classificationEntity(entities, entityKind, value);
+    if (target) return <button className="link-button" onClick={() => openEntity(entityRef(target))}>{value}</button>;
+    return <FilterValue id={filterId} value={value} />;
+  };
+  const OwnerLink = ({ e }) => {
+    const ref = (e.relations ?? []).find((r) => r.type === "ownedBy")?.targetRef;
+    return ref ? <EntityLink entities={entities} refText={ref} /> : <span>{ownerLabel(e, entities)}</span>;
+  };
 
   return (
     <section className="module-page">
@@ -344,12 +485,12 @@ export function CatalogPage() {
         <div>
           <span className="module-eyebrow">CATÁLOGO</span>
           <h1>Catálogo</h1>
-          <p>Todas las entidades registradas en Backstage: componentes, APIs, recursos, sistemas, grupos, usuarios y plantillas.</p>
+          <p>Todas las entidades registradas en Backstage: componentes, APIs, recursos, sistemas, dominios y grupos.</p>
         </div>
       </div>
 
       <div className="homologation-stats">
-        {["Component", "API", "Resource", "System"].map((k) => (
+        {["Component", "API", "Resource", "System", "Domain"].map((k) => (
           <div className="homologation-stat" key={k}>
             <span>{KIND_LABEL[k]}</span>
             <strong>{entities.filter((e) => e.kind === k).length}</strong>
@@ -360,7 +501,7 @@ export function CatalogPage() {
       <div className="module-panel">
         <div className="homologation-tabs">
           {KINDS.map((k) => (
-            <button key={k} className={kind === k ? "selected" : ""} onClick={() => { setKind(k); setType("Todos"); }}>
+            <button key={k} className={kind === k ? "selected" : ""} onClick={() => changeKind(k)}>
               {KIND_LABEL[k]}
             </button>
           ))}
@@ -368,21 +509,36 @@ export function CatalogPage() {
         </div>
 
         {kind !== "graph" && (
-          <div className="pipeline-toolbar">
-            <div className="search-input-wrapper">
-              <Search size={16} />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre, descripción o etiqueta..." />
+          <>
+            <div className="pipeline-toolbar">
+              <div className="search-input-wrapper">
+                <Search size={16} />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre, descripción o etiqueta..." />
+              </div>
+              <button
+                className={`catalog-filter-button${showFilters ? " open" : ""}`}
+                onClick={() => setShowFilters(!showFilters)}
+                aria-expanded={showFilters}
+                data-testid="filter-button"
+              >
+                <Filter size={16} /> Filtros{active.length ? ` (${active.length})` : ""}
+              </button>
+              <button className="refresh-module-button" onClick={loader.reload} disabled={loader.loading} title="Actualizar información">
+                <RefreshCw size={16} className={loader.loading ? "spin" : ""} />
+              </button>
             </div>
-            {types.length > 0 && (
-              <select value={type} onChange={(e) => setType(e.target.value)}>
-                <option>Todos</option>
-                {types.map((t) => <option key={t}>{t}</option>)}
-              </select>
+            {showFilters && <FilterPanel categories={categories} options={options} filters={filters} onToggle={toggle} />}
+            {active.length > 0 && (
+              <div className="catalog-filter-chips" data-testid="filter-chips">
+                {active.map(([c, v]) => (
+                  <button key={`${c.id}:${v}`} className="catalog-filter-chip" onClick={() => toggle(c.id, v)} title="Quitar filtro">
+                    <span>{c.label}:</span> {v} <X size={12} />
+                  </button>
+                ))}
+                <button className="link-button" onClick={() => setFilters({})}>Limpiar filtros</button>
+              </div>
             )}
-            <button className="refresh-module-button" onClick={loader.reload} disabled={loader.loading} title="Actualizar información">
-              <RefreshCw size={16} className={loader.loading ? "spin" : ""} />
-            </button>
-          </div>
+          </>
         )}
 
         <ErrorBox message={loader.error && `No fue posible consultar el catálogo. ${loader.error}`} />
@@ -397,7 +553,7 @@ export function CatalogPage() {
             </div>
             <RelationGraph entities={entities} showOwners={showOwners} />
           </>
-        ) : kind === "Group" || kind === "User" ? (
+        ) : kind === "Group" ? (
           <OrganizationTable entities={entities} kind={kind} rows={rows} />
         ) : (
           <div className="table-wrapper">
@@ -405,7 +561,7 @@ export function CatalogPage() {
               <thead>
                 <tr>
                   <th>Nombre</th>
-                  <th>Tipo</th>
+                  {!grouping && <th>Tipo</th>}
                   <th>División</th>
                   {classified && (
                     <>
@@ -415,30 +571,52 @@ export function CatalogPage() {
                       <th>Crítico</th>
                     </>
                   )}
-                  <th>Etiquetas</th>
+                  {grouping && <th>Componentes</th>}
+                  {!grouping && <th>Etiquetas</th>}
                   <th>Descripción</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 && (
-                  <tr><td colSpan={classified ? 9 : 5} className="empty-table">{loader.loading ? "Consultando información..." : "Sin entidades."}</td></tr>
+                  <tr><td colSpan={9} className="empty-table">{loader.loading ? "Consultando información..." : "Sin entidades."}</td></tr>
                 )}
                 {rows.map((e) => {
                   const c = classification(e);
+                  const members = grouping ? componentsOf(e, entities) : [];
+                  const value = annotation(e, "devops.lab/classification-value") ?? e.metadata.title ?? e.metadata.name;
                   return (
                     <tr key={entityRef(e)}>
                       <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{e.metadata.title ?? e.metadata.name}</button></td>
-                      <td>{e.spec?.type ?? "—"}</td>
-                      <td>{ownerLabel(e, entities)}</td>
+                      {!grouping && <td><FilterValue id="type" value={typeLabel(e.spec?.type)} /></td>}
+                      <td><OwnerLink e={e} /></td>
                       {classified && (
                         <>
-                          <td>{c.division ?? "—"}</td>
-                          <td>{c.initiative ?? "—"}</td>
-                          <td><LegacyValue value={c.legacy} /></td>
-                          <td><CriticalValue value={c.critical} /></td>
+                          <td><ClassificationLink entityKind="Domain" value={c.division} filterId="division" /></td>
+                          <td><ClassificationLink entityKind="System" value={c.initiative} filterId="initiative" /></td>
+                          <td><FilterValue id="legacy" value={c.legacy}><LegacyValue value={c.legacy} /></FilterValue></td>
+                          <td><FilterValue id="critical" value={c.critical}><CriticalValue value={c.critical} /></FilterValue></td>
                         </>
                       )}
-                      <td>{(e.metadata.tags ?? []).slice(0, 4).join(", ")}</td>
+                      {grouping && (
+                        <td>
+                          {members.length ? (
+                            <button
+                              className="link-button"
+                              title="Ver estos componentes"
+                              onClick={() => changeKind("Component", { [kind === "Domain" ? "division" : "initiative"]: [value] })}
+                            >
+                              {members.length}
+                            </button>
+                          ) : "0"}
+                        </td>
+                      )}
+                      {!grouping && (
+                        <td className="tag-cell">
+                          {(e.metadata.tags ?? []).slice(0, 4).map((t) => (
+                            <button key={t} className="link-button tag-link" onClick={() => only("tags", t)}>{t}</button>
+                          ))}
+                        </td>
+                      )}
                       <td>{e.metadata.description ?? "—"}</td>
                     </tr>
                   );
@@ -474,7 +652,7 @@ function OrganizationTable({ entities, kind, rows }) {
             kind === "Group" ? (
               <tr key={entityRef(e)}>
                 <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{displayName(e)}</button></td>
-                <td>{e.spec?.type ?? "—"}</td>
+                <td>{typeLabel(e.spec?.type) ?? "—"}</td>
                 <td>{e.spec?.parent ?? "—"}</td>
                 <td>{membersOf(e).join(", ") || "—"}</td>
                 <td>{e.metadata.description ?? "—"}</td>
@@ -522,11 +700,11 @@ function Overview({ entity, entities }) {
     <>
       <KeyValues
         rows={[
-          ["Tipo", entity.spec?.type],
+          ["Tipo", typeLabel(entity.spec?.type)],
           ["Ciclo de vida", entity.spec?.lifecycle],
           ["División", ownerRef ? <EntityLink entities={entities} refText={ownerRef} /> : ownerLabel(entity, entities)],
-          ["Dominio / Torre", c.division],
-          ["Producto / Sistema", c.initiative],
+          ["Dominio / Torre", c.division && <ClassificationRef entities={entities} kind="Domain" value={c.division} />],
+          ["Producto / Sistema", c.initiative && <ClassificationRef entities={entities} kind="System" value={c.initiative} />],
           ["Legado", c.legacy && <LegacyValue value={c.legacy} />],
           ["Crítico", c.critical && <CriticalValue value={c.critical} />],
           ["Sistema", partOf.length ? partOf.map((ref) => <EntityLink key={ref} entities={entities} refText={ref} />) : undefined],
@@ -535,6 +713,8 @@ function Overview({ entity, entities }) {
           ["Descripción", m.description]
         ]}
       />
+
+      {(entity.kind === "Domain" || entity.kind === "System") && <MemberComponents entity={entity} entities={entities} />}
 
       {(links.length > 0 || annotation(entity, "backstage.io/view-url")) && (
         <div className="panel-block">
@@ -562,6 +742,40 @@ function Overview({ entity, entities }) {
         </div>
       </div>
     </>
+  );
+}
+
+/** Dominio / Torre o Producto / Sistema de un componente: enlace a su ficha si existe en el catálogo. */
+function ClassificationRef({ entities, kind, value }) {
+  const { openEntity } = useNav();
+  const target = classificationEntity(entities, kind, value);
+  return target ? <button className="link-button" onClick={() => openEntity(entityRef(target))}>{value}</button> : <span>{value}</span>;
+}
+
+/** Componentes que pertenecen a un Dominio / Torre o a un Producto / Sistema. */
+function MemberComponents({ entity, entities }) {
+  const { openEntity } = useNav();
+  const members = componentsOf(entity, entities);
+  return (
+    <div className="panel-block" data-testid="member-components">
+      <strong>Componentes ({members.length})</strong>
+      <div className="table-wrapper">
+        <table className="pool-table">
+          <thead><tr><th>Nombre</th><th>Tipo</th><th>División</th><th>Descripción</th></tr></thead>
+          <tbody>
+            {members.length === 0 && <tr><td colSpan="4" className="empty-table">Ningún componente pertenece todavía.</td></tr>}
+            {members.map((e) => (
+              <tr key={entityRef(e)}>
+                <td><button className="link-button" onClick={() => openEntity(entityRef(e))}>{e.metadata.title ?? e.metadata.name}</button></td>
+                <td>{typeLabel(e.spec?.type) ?? "—"}</td>
+                <td>{ownerLabel(e, entities)}</td>
+                <td>{e.metadata.description ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -1023,7 +1237,7 @@ export function EntityPage({ reference, onBack }) {
       <button className="pipeline-action back-button" onClick={onBack}><ArrowLeft size={14} /> Volver</button>
       <div className="module-heading">
         <div>
-          <span className="module-eyebrow">{entity.kind.toUpperCase()}{entity.spec?.type ? ` · ${entity.spec.type}` : ""}</span>
+          <span className="module-eyebrow">{(KIND_SINGULAR[entity.kind] ?? entity.kind).toUpperCase()}{entity.spec?.type ? ` · ${typeLabel(entity.spec.type)}` : ""}</span>
           <h1>{entity.metadata.title ?? entity.metadata.name}</h1>
           <p>{entity.metadata.description ?? "Sin descripción."}</p>
         </div>
@@ -1081,7 +1295,7 @@ export function GlobalSearch() {
           {results.map((e) => (
             <button key={entityRef(e)} onMouseDown={() => { openEntity(entityRef(e)); setTerm(""); }}>
               <strong>{e.metadata.title ?? e.metadata.name}</strong>
-              <small>{e.kind}{e.spec?.type ? ` · ${e.spec.type}` : ""}</small>
+              <small>{KIND_SINGULAR[e.kind] ?? e.kind}{e.spec?.type ? ` · ${typeLabel(e.spec.type)}` : ""}</small>
             </button>
           ))}
         </div>
