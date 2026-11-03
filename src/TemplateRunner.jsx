@@ -547,7 +547,7 @@ function BranchField({ definition, required, value, onChange, error, options = {
   );
 }
 
-function PreviewField({ definition, onChange, options = {}, form }) {
+function PreviewField({ definition, onChange, options = {}, form, error: blocked }) {
   const repo = form[options.repoField];
   const source = form[options.sourceField];
   const [state, setState] = React.useState({});
@@ -638,6 +638,7 @@ function PreviewField({ definition, onChange, options = {}, form }) {
     <div className={`preview-box ${preview && !preview.valid ? "preview-invalid" : ""}`}>
       <strong>{definition.title}</strong>
       {body}
+      {blocked && <p className="field-error" role="alert">{blocked}</p>}
     </div>
   );
 }
@@ -649,7 +650,7 @@ const BRANCH_NAME_PARTS = ["id", "description", "number", "version"];
  * Comprobación de «Crear una rama» antes de ejecutar: calcula el nombre final, valida las convenciones y consulta si la
  * rama ya existe. Si existe (o no cumple) bloquea el avance: el campo queda vacío hasta que el nombre sea válido y esté libre.
  */
-function BranchNameField({ definition, onChange, options = {}, form }) {
+function BranchNameField({ definition, onChange, options = {}, form, error: blocked }) {
   const repo = form[options.repoField];
   const role = form[options.roleField];
   const from = form[options.fromField];
@@ -727,6 +728,7 @@ function BranchNameField({ definition, onChange, options = {}, form }) {
     <div className={`preview-box ${result && result.complete && !result.valid ? "preview-invalid" : ""}`}>
       <strong>{definition.title}</strong>
       {body}
+      {blocked && <p className="field-error" role="alert">{blocked}</p>}
     </div>
   );
 }
@@ -748,9 +750,9 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
     case "BranchPicker":
       return <BranchField {...common} options={options} form={form} />;
     case "PullRequestPreview":
-      return <PreviewField definition={definition} onChange={common.onChange} options={options} form={form} />;
+      return <PreviewField definition={definition} onChange={common.onChange} options={options} form={form} error={error} />;
     case "BranchNamePreview":
-      return <BranchNameField definition={definition} onChange={common.onChange} options={options} form={form} />;
+      return <BranchNameField definition={definition} onChange={common.onChange} options={options} form={form} error={error} />;
     default:
       break;
   }
