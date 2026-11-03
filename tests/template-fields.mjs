@@ -57,6 +57,7 @@ const schemas = {
 };
 const products = [{ name: "CEDIS WEB", fixed: true }];
 const added = [];
+const submitted = [];
 
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1500, height: 1000 } });
@@ -102,7 +103,16 @@ await context.route("**/backstage/**", (route) => {
   if (url.includes("/api/branching/rules")) {
     return json({ branches: [{ id: "team", createdFrom: ["develop"] }, { id: "task-resolution", createdFrom: ["team", "sprint", "develop"] }], deployments: {} });
   }
-  if (url.includes("/api/branching/branch-name")) return json({ name: "team/team-001", complete: false, valid: false, exists: false, errors: [] });
+  if (url.includes("/api/branching/branch-name")) {
+    const number = JSON.parse(req.postData() ?? "{}").number;
+    if (number === "001") return json({ name: "team/team-001", complete: true, valid: false, exists: true, errors: ['La rama "team/team-001" ya existe en svc. Cambia los datos para que el nombre sea distinto.'] });
+    if (number === "777") return json({ name: "team/team-777", complete: true, valid: true, exists: false, errors: [] });
+    return json({ name: "team/team-001", complete: false, valid: false, exists: false, errors: [] });
+  }
+  if (url.includes("/api/scaffolder/v2/tasks") && req.method() === "POST") {
+    submitted.push(JSON.parse(req.postData() ?? "{}"));
+    return json({ id: "tarea-1" }, 201);
+  }
   const lista = /entities|tasks|pipelines|agent-pools|branches|policies|repositories|items|components|baseline|clusters/.test(url);
   return json(lista ? [] : {});
 });
@@ -150,6 +160,21 @@ await page.waitForTimeout(500);
 if (await computed.count()) fail("task-resolution con solo develop: no debe calcularse el origen");
 if (!(await fieldOf("Crear a partir de").locator("select").count())) fail("task-resolution con solo develop: falta el selector");
 await fieldOf("Componente").locator("select").selectOption("svc");
+await page.waitForTimeout(300);
+
+// 1b) Si la rama ya existe, la vista previa lo dice y Ejecutar no envía la tarea; con un nombre libre sí se puede.
+await fieldOf("Tipo de rama").locator("select").selectOption("team");
+await fieldOf("Consecutivo").locator("input").fill("001");
+await page.locator(".create-modal-body", { hasText: "ya existe" }).waitFor({ timeout: 5000 }).catch(() => fail("la vista previa no avisa que la rama ya existe"));
+await page.locator(".create-modal button", { hasText: /^Ejecutar/ }).last().click();
+await page.waitForTimeout(600);
+if (submitted.length) fail("con la rama existente, Ejecutar no debe enviar la tarea");
+if (!(await page.locator(".create-modal-body", { hasText: "La rama ya existe o no cumple la estrategia" }).count())) fail("falta el error que explica por qué no se puede ejecutar");
+await fieldOf("Consecutivo").locator("input").fill("777");
+await page.locator(".create-modal-body", { hasText: "team/team-777" }).waitFor({ timeout: 5000 }).catch(() => fail("la vista previa no muestra team/team-777"));
+await page.waitForTimeout(600);
+if (await page.locator(".create-modal-body", { hasText: "La rama ya existe o no cumple la estrategia" }).count()) fail("con un nombre libre no debe quedar el error");
+await fieldOf("Tipo de rama").locator("select").selectOption("task-resolution");
 await page.waitForTimeout(300);
 
 // 2) El enlace abre la ficha del catálogo en otra pestaña con la sesión copiada.
