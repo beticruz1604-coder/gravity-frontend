@@ -373,6 +373,18 @@ export const homologation = {
   health: () => request("/api/homologation/health")
 };
 
+/* Release Management: historial de informes de Pre-Validación y Pre-Liberación (los genera la plantilla «Integrar cambios») */
+
+export const rm = {
+  /** Filtros: kind (prevalidacion | preliberacion), component, passed (true | false), q, from, to (AAAA-MM-DD), limit, offset. */
+  reports: (filters = {}) => {
+    const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== null && v !== ""));
+    return request(`/api/rm/reports${query.toString() ? `?${query}` : ""}`);
+  },
+  report: (id) => request(`/api/rm/reports/${enc(id)}`),
+  components: () => request("/api/rm/components")
+};
+
 /* TechDocs: la documentación la genera y publica la VM de Backstage (GCS); aquí se consulta si existe y se lee su contenido. */
 
 export const techdocs = {

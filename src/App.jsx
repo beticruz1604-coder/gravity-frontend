@@ -31,7 +31,8 @@ import {
   Loader2,
   ExternalLink,
   UploadCloud,
-  Library
+  Library,
+  ClipboardCheck
 } from "lucide-react";
 
 import "./App.css";
@@ -65,6 +66,7 @@ import {
   RepositoriesPage,
   PipelinesPage,
   ReleasesPage,
+  ReleaseManagementPage,
   TechDebtPage,
   ComplianceIqPage,
   SummaryPage,
@@ -83,6 +85,7 @@ const menuItems = [
   { name: "Repositories", icon: GitBranch },
   { name: "Pipelines", icon: Workflow },
   { name: "Releases", icon: Rocket },
+  { name: "Release Management", icon: ClipboardCheck },
   { name: "TechDebt", icon: Bug },
   { name: "Pool de Agentes", icon: Activity },
   { name: "Compliance IQ", icon: ShieldCheck },
@@ -2260,11 +2263,18 @@ function App() {
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
     return decodeURIComponent(m[1]);
   }, []);
+  // Enlace directo a un informe de Release Management (#informe=<id>), p. ej. desde el mensaje de Google Chat.
+  const linkedReport = React.useMemo(() => {
+    const m = window.location.hash.match(/^#informe=([0-9a-f]{24})$/);
+    if (!m) return null;
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    return m[1];
+  }, []);
   const [
     requestedPage,
     setSelectedPage
   ] = React.useState(
-    linkedEntity ? "Catálogo" : "Resumen"
+    linkedEntity ? "Catálogo" : linkedReport ? "Release Management" : "Resumen"
   );
   // Solo se muestra una sección que el rol permite; si la pedida no está, la primera disponible.
   const selectedPage = access.sections.includes(requestedPage)
@@ -2404,6 +2414,10 @@ function App() {
             <ReleasesPage />
           )}
 
+          {showPages && selectedPage === "Release Management" && (
+            <ReleaseManagementPage initialReport={linkedReport} />
+          )}
+
           {showPages && selectedPage === "TechDebt" && (
             <TechDebtPage />
           )}
@@ -2443,6 +2457,7 @@ function App() {
             "Repositories",
             "Pipelines",
             "Releases",
+            "Release Management",
             "TechDebt",
             "Pool de Agentes",
             "Compliance IQ",
