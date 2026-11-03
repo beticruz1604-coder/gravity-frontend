@@ -51,7 +51,7 @@ import {
   PipelineStatus,
   TaskStatus
 } from "./status";
-import { NavContext } from "./nav";
+import { NavContext, useNav } from "./nav";
 import { NewVersionBanner } from "./version";
 import { initials, useAccess, useIdentity } from "./identity";
 import { INTERACTIVE_SIGN_IN } from "./backstage";
@@ -2230,22 +2230,99 @@ function AgentPoolsPage() {
 
 /*PLACEHOLDER*/
 
-function PlaceholderPage({ title }) {
+/*
+ * Secciones propias de GRAVITY (sin datos en el laboratorio). Cada una muestra primero lo que Backstage le da a esa sección
+ * y de qué API sale, y al final el módulo de GRAVITY como contexto. `see` son secciones de la demo donde ya se ve.
+ */
+const GRAVITY_MODULES = {
+  "Soporte DevSecOps": {
+    summary: "El chatbot y la base de conocimiento de la oficina responden con la estrategia que de verdad se aplica.",
+    adds: [
+      ["Política de branching vigente", "Tipos de rama, nombres, origen, destino, estrategia de fusión y quién crea y aprueba cada flujo, tal como se validan en cada operación. La respuesta a «¿cuál es la política de branching?» sale de la configuración, no de un documento que se desactualiza.", "GET /api/branching/rules"],
+      ["¿Puedo integrar esta rama?", "Valida una integración sin crear nada y explica por qué se bloquearía.", "POST /api/branching/validate"],
+      ["Documentación de cada componente", "La documentación técnica publicada desde su repositorio, en su ficha del catálogo.", "TechDocs"]
+    ],
+    see: ["Compliance IQ", "Catálogo"],
+    gravity: "Chatbot de la oficina y base de conocimiento con soluciones validadas."
+  },
+  Insights: {
+    summary: "Las métricas de GRAVITY se pueden agrupar como se organiza el negocio y suman la información de liberación.",
+    adds: [
+      ["Clasificación del negocio", "División, Dominio / Torre, Producto / Sistema, criticidad y Legado de cada componente, para ver las métricas por torre o por producto.", "GET /api/catalog/entities"],
+      ["Pull requests trazables", "Los PR creados desde GRAVITY llevan el folio de InvGate y la etiqueta gravity: lead time por ticket, por torre o por flujo.", "Integrar cambios"],
+      ["Candidatos a liberación directa", "El historial de informes de Pre-Validación y Pre-Liberación: qué componentes cumplen el Pasaporte DevSecOps y cuáles irían al CAB.", "GET /api/rm/reports"]
+    ],
+    see: ["Release Management", "Catálogo"],
+    gravity: "Métricas de pipelines, releases y lead time de pull requests."
+  },
+  "Error Analytics": {
+    summary: "Cada falla llega con su contexto: de quién es el componente, qué tan crítico es y si usa versiones aprobadas.",
+    adds: [
+      ["Dueño y criticidad", "El pipeline que falla se liga a su componente: División, Producto, criticidad y repositorio, para priorizar y dirigir la falla al equipo correcto.", "GET /api/catalog/entities"],
+      ["Versiones fuera de la línea base", "Si el componente usa una tecnología o una versión no homologada, una causa frecuente de fallas de dependencias.", "GET /api/homologation/baseline"],
+      ["Fallas que se evitan antes", "La revisión del pipeline hacia release y master detecta etapas o reglas faltantes antes de crear el pull request.", "POST /api/branching/validate"]
+    ],
+    see: ["Homologation Status", "Catálogo"],
+    gravity: "Clasificación de fallas con IA y biblioteca de errores conocidos."
+  },
+  "Log Analyzer": {
+    summary: "Del log al componente y a la acción: quién es el dueño, qué cambió y cómo volver a una versión que funcionaba.",
+    adds: [
+      ["Ficha del componente", "Repositorio, dependencias, documentación y versiones por ambiente del servicio cuyo log se analiza.", "GET /api/catalog/entities"],
+      ["Operaciones que explican sus bloqueos", "Crear rama, integrar cambios y desplegar dejan un registro paso a paso, con el motivo de cada bloqueo en lenguaje claro.", "Scaffolder"],
+      ["Volver atrás sin recompilar", "Si el problema es la versión desplegada, Rollback despliega una ejecución anterior desde Releases.", "Releases"]
+    ],
+    see: ["Releases", "Catálogo"],
+    gravity: "Análisis de logs asistido por IA con la base de conocimiento de la oficina."
+  }
+};
+
+function PlaceholderPage({ title, sections = [] }) {
+  const { navigate } = useNav();
+  const module = GRAVITY_MODULES[title];
+  if (!module) {
+    return (
+      <section className="module-page">
+        <div className="module-heading">
+          <div>
+            <span className="module-eyebrow">GRAVITY</span>
+            <h1>{title}</h1>
+            <p>Esta sección estará disponible próximamente.</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+  const links = module.see.filter((name) => sections.includes(name));
   return (
     <section className="module-page">
       <div className="module-heading">
         <div>
-          <span className="module-eyebrow">
-            GRAVITY
-          </span>
-
+          <span className="module-eyebrow">GRAVITY · con Backstage</span>
           <h1>{title}</h1>
-
-          <p>
-            Esta sección estará disponible
-            próximamente.
-          </p>
+          <p>{module.summary}</p>
         </div>
+      </div>
+      <div className="module-panel gravity-module">
+        <strong className="gravity-module-title">Lo que Backstage le da a esta sección</strong>
+        <div className="gravity-module-grid">
+          {module.adds.map(([name, text, source]) => (
+            <div key={name} className="gravity-module-card">
+              <strong>{name}</strong>
+              <p>{text}</p>
+              <code>{source}</code>
+            </div>
+          ))}
+        </div>
+        {links.length > 0 && (
+          <div className="gravity-module-links">
+            <span>Dónde verlo en esta demo:</span>
+            {links.map((name) => (
+              <button key={name} className="link-button" onClick={() => navigate(name)}>{name}</button>
+            ))}
+          </div>
+        )}
+        <small className="gravity-module-note">Módulo de GRAVITY: {module.gravity}</small>
       </div>
     </section>
   );
@@ -2472,6 +2549,7 @@ function App() {
               title={
                 selectedPage
               }
+              sections={access.sections}
             />
           )}
         </div>

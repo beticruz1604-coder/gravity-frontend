@@ -3311,3 +3311,67 @@ td.wrap {
     white-space: normal;
   }
 }
+
+/* Secciones propias de GRAVITY: lo que Backstage les da (PlaceholderPage). */
+.gravity-module {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 19px;
+}
+
+.gravity-module-title {
+  color: #edf3ff;
+  font-size: 12px;
+}
+
+.gravity-module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.gravity-module-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 15px;
+  background: #0b141e;
+  border: 1px solid #26344a;
+  border-radius: 8px;
+}
+
+.gravity-module-card strong {
+  color: #edf3ff;
+  font-size: 13px;
+}
+
+.gravity-module-card p {
+  margin: 0;
+  color: #9fb0c3;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.gravity-module-card code {
+  align-self: flex-start;
+  padding: 2px 7px;
+  color: #a9c5ff;
+  background: #13213a;
+  border-radius: 5px;
+  font-size: 10px;
+}
+
+.gravity-module-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+}
+
+.gravity-module-links span,
+.gravity-module-note {
+  color: #65788b;
+  font-size: 11px;
+}
