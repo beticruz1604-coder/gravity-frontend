@@ -638,7 +638,7 @@ export function HomologationPage() {
           </>
         )}
 
-        <Footer loader={tab === "requisitos" ? requirements : loader} source={tab === "requisitos" ? "Backstage · /api/homologation/requirements" : "Backstage · /api/homologation"} />
+        <Footer loader={tab === "requisitos" ? requirements : loader} source={tab === "requisitos" ? "Requisitos de homologación" : "Homologación"} />
       </div>
     </section>
   );
@@ -739,7 +739,7 @@ export function RepositoriesPage() {
             </tbody>
           </table>
         </div>
-        <Footer loader={loader} source="Backstage · catálogo + Azure DevOps" />
+        <Footer loader={loader} source="Catálogo + Azure DevOps" />
       </div>
     </section>
   );
@@ -810,7 +810,7 @@ export function PipelinesPage() {
             </tbody>
           </table>
         </div>
-        <Footer loader={loader} source="Backstage · /api/branching/pipelines" />
+        <Footer loader={loader} source="Azure DevOps" />
       </div>
     </section>
   );
@@ -892,7 +892,7 @@ export function ReleasesPage({ tabs }) {
             </tbody>
           </table>
         </div>
-        <Footer loader={loader} source="Backstage · /api/homologation/components" />
+        <Footer loader={loader} source="Homologación de componentes" />
       </div>
     </section>
   );
@@ -983,7 +983,7 @@ export function TechDebtPage() {
             </tbody>
           </table>
         </div>
-        <Footer loader={loader} source="Backstage · /api/homologation/baseline + /api/scorecards" />
+        <Footer loader={loader} source="Línea base y scorecards" />
       </div>
     </section>
   );
@@ -1145,7 +1145,7 @@ export function ComplianceIqPage() {
         <div className="panel-title"><strong>Roles</strong><small>Estrategia {rules?.strategy ?? "—"}</small></div>
         <div className="table-wrapper">
           <table className="pool-table">
-            <thead><tr><th>Rol</th><th>Responsabilidad</th><th>Grupo de Backstage</th></tr></thead>
+            <thead><tr><th>Rol</th><th>Responsabilidad</th><th>Grupo</th></tr></thead>
             <tbody>
               {roles.length === 0 && <EmptyRow colSpan={3} loading={loader.loading}>Sin información.</EmptyRow>}
               {roles.map((role) => (
@@ -1314,10 +1314,10 @@ export function ToolsHealthPage() {
       }
     };
     return Promise.all([
-      probe("Backstage · Catálogo", "Componentes y plantillas registrados", async () => `${(await catalog.components()).length} componentes`),
-      probe("Backstage · Branching", "Reglas y estrategia", async () => `${(await branching.rules()).strategy}`),
-      probe("Backstage · Homologación", "Infraestructura y componentes", async () => `${(await homologation.items()).items.length} elementos`),
-      probe("Azure DevOps · Pipelines", "A través de Backstage", async () => `${(await branching.pipelines()).pipelines.length} pipelines`),
+      probe("GRAVITY · Catálogo", "Componentes y plantillas registrados", async () => `${(await catalog.components()).length} componentes`),
+      probe("GRAVITY · Branching", "Reglas y estrategia", async () => `${(await branching.rules()).strategy}`),
+      probe("GRAVITY · Homologación", "Infraestructura y componentes", async () => `${(await homologation.items()).items.length} elementos`),
+      probe("Azure DevOps · Pipelines", "Definiciones y última ejecución", async () => `${(await branching.pipelines()).pipelines.length} pipelines`),
       probe("Azure DevOps · Agentes", "Pools de agentes", async () => `${(await branching.agentPools()).pools.length} pools`)
     ]);
   }, { interval: 60000 });
@@ -1351,7 +1351,7 @@ export function ToolsHealthPage() {
             </tbody>
           </table>
         </div>
-        <Footer loader={loader} source="Backstage" />
+        <Footer loader={loader} source="GRAVITY" />
       </div>
     </section>
   );
@@ -1897,7 +1897,7 @@ export function ReleaseManagementPage({ initialReport, tabs }) {
         {items.length < total && (
           <div className="rm-more"><button className="link-button" onClick={() => setLimit(limit + RM_PAGE)}>Ver más ({items.length} de {total})</button></div>
         )}
-        <Footer loader={loader} source="Backstage · /api/rm/reports · MongoDB" />
+        <Footer loader={loader} source="Informes de liberación" />
       </div>
     </section>
   );

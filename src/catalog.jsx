@@ -521,7 +521,7 @@ export function CatalogPage() {
         <div>
           <span className="module-eyebrow">CATÁLOGO</span>
           <h1>Catálogo</h1>
-          <p>Todas las entidades registradas en Backstage: componentes, APIs, recursos, divisiones, dominios / torres y productos / sistemas.</p>
+          <p>Todas las entidades registradas en el catálogo: componentes, APIs, recursos, divisiones, dominios / torres y productos / sistemas.</p>
         </div>
       </div>
 
@@ -663,7 +663,7 @@ export function CatalogPage() {
             </table>
           </div>
         )}
-        <div className="module-footer-info"><span>{rows.length} de {ofKind.length}</span><span>Backstage · /api/catalog</span></div>
+        <div className="module-footer-info"><span>{rows.length} de {ofKind.length}</span><span>Catálogo</span></div>
       </div>
     </section>
   );
@@ -1158,7 +1158,7 @@ function KubernetesView({ entity }) {
   if (state.loading) return <Loading />;
   if (state.error) return <ErrorBox message={state.error} />;
   if (state.data.clusters.length === 0) {
-    return <Notice>Backstage no tiene clústeres de Kubernetes configurados (kubernetes.clusterLocatorMethods), así que no hay pods que mostrar.</Notice>;
+    return <Notice>No hay clústeres de Kubernetes configurados, así que no hay pods que mostrar.</Notice>;
   }
 
   const { services } = state.data;

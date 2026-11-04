@@ -1220,7 +1220,7 @@ export function TemplateModal({ onClose, template, preset, filter, title = "Crea
               {taskId
                 ? "Sigue el avance; también queda en el historial de tareas."
                 : name
-                  ? "Completa los datos; Backstage valida la estrategia antes de ejecutar."
+                  ? "Completa los datos; GRAVITY valida la estrategia antes de ejecutar."
                   : "Elige qué quieres hacer."}
             </p>
           </div>

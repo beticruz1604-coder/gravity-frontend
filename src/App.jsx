@@ -1927,7 +1927,7 @@ function PipelineEnginePage() {
           </span>
 
           <span>
-            Backstage · /api/branching/pipelines
+            Azure DevOps
           </span>
         </div>
       </div>
@@ -2228,7 +2228,7 @@ function AgentPoolsPage() {
       <div className="demo-notice">
         <span className="demo-indicator" />
 
-        {error ? "No se pudo consultar Backstage." : "Información actualizada desde Backstage (Azure DevOps)."}
+        {error ? "No se pudo consultar la información." : "Información actualizada desde Azure DevOps."}
       </div>
     </>
   );
