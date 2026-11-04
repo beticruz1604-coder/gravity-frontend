@@ -138,7 +138,7 @@ export async function signIn(username, password) {
   }
   const fresh = toSession(await response.json());
   if (!fresh) {
-    throw new Error("Backstage no entregó la identidad.");
+    throw new Error("El servidor no entregó la identidad.");
   }
   loginHeader = header;
   session = saveSession(fresh);
@@ -232,12 +232,12 @@ async function requestOnce(path, { method = "GET", body, timeout = 30000 } = {})
     return data;
   } catch (err) {
     if (err.name === "AbortError") {
-      throw new ApiError("Backstage no respondió a tiempo.", 0);
+      throw new ApiError("El servidor no respondió a tiempo.", 0);
     }
     if (err instanceof ApiError) {
       throw err;
     }
-    const failure = new ApiError("No se pudo conectar con Backstage.", 0);
+    const failure = new ApiError("No se pudo conectar con el servidor.", 0);
     failure.network = true;
     throw failure;
   } finally {

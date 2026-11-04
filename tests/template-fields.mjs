@@ -121,7 +121,7 @@ const fail = (m) => errors.push(`FALLO: ${m}`);
 const openTemplate = async (title) => {
   await page.goto("http://localhost:5199/");
   await page.waitForSelector(".sidebar nav button", { timeout: 15000 });
-  await page.locator(".sidebar nav button", { hasText: "Pipeline Engine" }).first().click();
+  await page.locator(".sidebar nav button", { hasText: "Autoservicio" }).first().click();
   await page.locator("button.create-button", { hasText: "Create" }).click();
   await page.locator(".gallery-card", { hasText: title }).click();
   await page.waitForSelector(".create-step-content select, .create-modal-body select", { timeout: 10000 });

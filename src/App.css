@@ -3311,3 +3311,9 @@ td.wrap {
     white-space: normal;
   }
 }
+
+/* Pestañas de una sección que agrupa dos (Releases: Ambientes e Informes de liberación). */
+.section-tabs {
+  padding: 0;
+  margin-bottom: 18px;
+}

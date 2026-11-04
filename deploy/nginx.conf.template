@@ -87,7 +87,7 @@ server {
   location @backstage_no_disponible {
     default_type application/json;
     include /etc/nginx/snippets/security-headers.conf;
-    return 503 '{"error":{"message":"Backstage no está disponible."}}';
+    return 503 '{"error":{"message":"El servicio no está disponible."}}';
   }
 
   location /backstage/ {

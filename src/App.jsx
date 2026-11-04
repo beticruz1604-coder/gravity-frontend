@@ -31,8 +31,7 @@ import {
   Loader2,
   ExternalLink,
   UploadCloud,
-  Library,
-  ClipboardCheck
+  Library
 } from "lucide-react";
 
 import "./App.css";
@@ -77,25 +76,28 @@ import {
 
 /*MENU*/
 
+// `name` es la sección que da el backend (también es la llave de permisos); `label`, el nombre que se muestra.
+// Releases agrupa dos secciones del backend, cada una en su pestaña.
 const menuItems = [
   { name: "Resumen", icon: LayoutDashboard },
   { name: "Catálogo", icon: Library },
-  { name: "Soporte DevSecOps", icon: Headset },
-  { name: "Insights", icon: BarChart3 },
+  { name: "Pipeline Engine (IDP)", label: "Autoservicio", icon: GitPullRequest },
+  { name: "Releases", icon: Rocket, pages: ["Releases", "Release Management"] },
+  { name: "Homologation Status", icon: CheckCircle },
+  { name: "Compliance IQ", icon: ShieldCheck },
   { name: "Repositories", icon: GitBranch },
   { name: "Pipelines", icon: Workflow },
-  { name: "Releases", icon: Rocket },
-  { name: "Release Management", icon: ClipboardCheck },
-  { name: "TechDebt", icon: Bug },
   { name: "Pool de Agentes", icon: Activity },
-  { name: "Compliance IQ", icon: ShieldCheck },
-  { name: "Error Analytics", icon: AlertTriangle },
+  { name: "TechDebt", icon: Bug },
   { name: "Tools Health", icon: Wrench },
+  { name: "Soporte DevSecOps", icon: Headset },
+  { name: "Insights", icon: BarChart3 },
+  { name: "Error Analytics", icon: AlertTriangle },
   { name: "Log Analyzer", icon: FileSearch },
-  { name: "Homologation Status", icon: CheckCircle },
-  { name: "Pipeline Engine (IDP)", icon: GitPullRequest },
   { name: "Usuarios", icon: Users }
 ];
+
+const RELEASE_TABS = [["Releases", "Ambientes"], ["Release Management", "Informes de liberación"]];
 
 /* NORMALIZADORES
    Permiten que el frontend pueda recibir diferentes nombres
@@ -212,7 +214,11 @@ function normalizePipeline(item = {}) {
 
 function Sidebar({ selectedPage, onNavigate, access, onChangePassword }) {
   const identity = useIdentity(access.authenticated);
-  const visible = INTERACTIVE_SIGN_IN && !access.authenticated ? [] : menuItems.filter((item) => access.sections.includes(item.name));
+  const visible = INTERACTIVE_SIGN_IN && !access.authenticated
+    ? []
+    : menuItems
+        .map((item) => ({ ...item, allowed: (item.pages ?? [item.name]).filter((page) => access.sections.includes(page)) }))
+        .filter((item) => item.allowed.length > 0);
   return (
     <aside className="sidebar">
       <div className="logo">
@@ -223,7 +229,7 @@ function Sidebar({ selectedPage, onNavigate, access, onChangePassword }) {
       <nav className="menu">
         {visible.map((item) => {
           const Icon = item.icon;
-          const isActive = selectedPage === item.name;
+          const isActive = (item.pages ?? [item.name]).includes(selectedPage);
 
           return (
             <button
@@ -232,14 +238,14 @@ function Sidebar({ selectedPage, onNavigate, access, onChangePassword }) {
               className={`menu-item ${
                 isActive ? "active" : ""
               }`}
-              onClick={() => onNavigate(item.name)}
+              onClick={() => onNavigate(item.allowed[0])}
             >
               <Icon
                 size={17}
                 strokeWidth={1.8}
               />
 
-              <span>{item.name}</span>
+              <span>{item.label ?? item.name}</span>
             </button>
           );
         })}
@@ -1591,13 +1597,13 @@ function PipelineEnginePage() {
           </span>
 
           <h1>
-            Pipeline Engine (IDP)
+            Autoservicio
           </h1>
 
           <p>
-            Consulta pipelines, revisa su
-            configuración y simula el flujo
-            de ejecución de una entrega.
+            Crea servicios con los Golden Paths,
+            ramas e integraciones, y consulta
+            los pipelines y las tareas recientes.
           </p>
         </div>
 
@@ -1921,7 +1927,7 @@ function PipelineEnginePage() {
           </span>
 
           <span>
-            Backstage · /api/branching/pipelines
+            Azure DevOps
           </span>
         </div>
       </div>
@@ -2222,7 +2228,7 @@ function AgentPoolsPage() {
       <div className="demo-notice">
         <span className="demo-indicator" />
 
-        {error ? "No se pudo consultar Backstage." : "Información actualizada desde Backstage (Azure DevOps)."}
+        {error ? "No se pudo consultar la información." : "Información actualizada desde Azure DevOps."}
       </div>
     </>
   );
@@ -2230,24 +2236,37 @@ function AgentPoolsPage() {
 
 /*PLACEHOLDER*/
 
+/* Secciones propias de GRAVITY: en el laboratorio no tienen datos, solo su descripción. */
+const GRAVITY_MODULES = {
+  "Soporte DevSecOps": "Chatbot y base de conocimiento de la oficina DevSecOps. Resuelve dudas sobre pipelines, políticas, errores conocidos y la estrategia de branching vigente.",
+  Insights: "Métricas de pipelines, releases y pull requests por División, Dominio / Torre y Producto, con los componentes que cumplen para liberación directa.",
+  "Error Analytics": "Clasifica las fallas de los pipelines y las compara con la biblioteca de errores conocidos. Cada falla se liga a su componente, su División y su criticidad, y muestra si usa versiones fuera de la línea base.",
+  "Log Analyzer": "Analiza los logs de los pipelines y sugiere la causa y la solución. Desde el log se llega a la ficha del componente y, si el problema es la versión desplegada, al rollback desde Releases."
+};
+
 function PlaceholderPage({ title }) {
   return (
     <section className="module-page">
       <div className="module-heading">
         <div>
-          <span className="module-eyebrow">
-            GRAVITY
-          </span>
-
+          <span className="module-eyebrow">GRAVITY</span>
           <h1>{title}</h1>
-
-          <p>
-            Esta sección estará disponible
-            próximamente.
-          </p>
+          <p>{GRAVITY_MODULES[title] ?? "Esta sección estará disponible próximamente."}</p>
         </div>
       </div>
     </section>
+  );
+}
+
+function SectionTabs({ tabs, selected, sections, onSelect }) {
+  const visible = tabs.filter(([page]) => sections.includes(page));
+  if (visible.length < 2) return null;
+  return (
+    <div className="homologation-tabs section-tabs">
+      {visible.map(([page, label]) => (
+        <button key={page} className={selected === page ? "selected" : ""} onClick={() => onSelect(page)}>{label}</button>
+      ))}
+    </div>
   );
 }
 
@@ -2411,11 +2430,11 @@ function App() {
           )}
 
           {showPages && selectedPage === "Releases" && (
-            <ReleasesPage />
+            <ReleasesPage tabs={<SectionTabs tabs={RELEASE_TABS} selected={selectedPage} sections={access.sections} onSelect={navigate} />} />
           )}
 
           {showPages && selectedPage === "Release Management" && (
-            <ReleaseManagementPage initialReport={linkedReport} />
+            <ReleaseManagementPage initialReport={linkedReport} tabs={<SectionTabs tabs={RELEASE_TABS} selected={selectedPage} sections={access.sections} onSelect={navigate} />} />
           )}
 
           {showPages && selectedPage === "TechDebt" && (
