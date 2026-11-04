@@ -1818,7 +1818,7 @@ export function ReleaseManagementPage({ initialReport, tabs }) {
       <Heading
         eyebrow="ENTREGA"
         title="Releases"
-        description="Informes de Pre-Validación (team/sprint → develop) y Pre-Liberación (release → master) de cada pull request creado desde GRAVITY. Cada informe también se envía al espacio de Google Chat."
+        description="Informes de Pre-Validación (team/sprint → develop y develop → QA) y Pre-Liberación (QA → release y release → master) de cada pull request creado desde GRAVITY. Cada informe también se envía al espacio de Google Chat."
       />
       {tabs}
       <Stats
@@ -1875,7 +1875,7 @@ export function ReleaseManagementPage({ initialReport, tabs }) {
             <tbody>
               {items.length === 0 && (
                 <EmptyRow colSpan={11} loading={loader.loading && !loader.data}>
-                  {active ? "Ningún informe cumple los filtros." : "Todavía no hay informes. Se generan al integrar cambios de team/sprint hacia develop y de release hacia master."}
+                  {active ? "Ningún informe cumple los filtros." : "Todavía no hay informes. Se generan al integrar cambios de team/sprint hacia develop, de develop hacia QA, de QA hacia release y de release hacia master."}
                 </EmptyRow>
               )}
               {items.map((r) => (
