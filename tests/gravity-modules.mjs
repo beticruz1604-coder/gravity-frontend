@@ -40,7 +40,8 @@ for (const [name, word] of Object.entries(MODULES)) {
   await page.locator(".sidebar nav button", { hasText: name }).click();
   await page.waitForTimeout(400);
   const texto = await page.locator("main").innerText();
-  espera(texto.includes(word) && texto.includes("Backstage"), `${name}: falta su descripción`);
+  espera(texto.includes(word), `${name}: falta su descripción`);
+  espera(!texto.includes("Backstage"), `${name}: la descripción no debe mencionar Backstage`);
   espera(!texto.includes("próximamente"), `${name}: sigue diciendo «próximamente»`);
   if (process.env.SHOT && name === "Soporte DevSecOps") await page.screenshot({ path: process.env.SHOT });
 }

@@ -2238,10 +2238,10 @@ function AgentPoolsPage() {
 
 /* Secciones propias de GRAVITY: en el laboratorio no tienen datos, solo su descripción. */
 const GRAVITY_MODULES = {
-  "Soporte DevSecOps": "Chatbot y base de conocimiento de la oficina DevSecOps. Resuelve dudas sobre pipelines, políticas y errores conocidos. Con Backstage, responde sobre la estrategia de branching con las mismas reglas que se aplican al crear ramas e integrar cambios.",
-  Insights: "Métricas de pipelines, releases y pull requests. Con el catálogo de Backstage se pueden ver por División, Dominio / Torre y Producto, y con los informes de liberación, qué componentes cumplen para liberación directa.",
-  "Error Analytics": "Clasifica las fallas de los pipelines y las compara con la biblioteca de errores conocidos. Con Backstage, cada falla se liga a su componente, su División y su criticidad, y se ve si usa versiones fuera de la línea base.",
-  "Log Analyzer": "Analiza los logs de los pipelines y sugiere la causa y la solución. Con Backstage, el log lleva a la ficha del componente y, si el problema es la versión desplegada, al rollback desde Releases."
+  "Soporte DevSecOps": "Chatbot y base de conocimiento de la oficina DevSecOps. Resuelve dudas sobre pipelines, políticas, errores conocidos y la estrategia de branching vigente.",
+  Insights: "Métricas de pipelines, releases y pull requests por División, Dominio / Torre y Producto, con los componentes que cumplen para liberación directa.",
+  "Error Analytics": "Clasifica las fallas de los pipelines y las compara con la biblioteca de errores conocidos. Cada falla se liga a su componente, su División y su criticidad, y muestra si usa versiones fuera de la línea base.",
+  "Log Analyzer": "Analiza los logs de los pipelines y sugiere la causa y la solución. Desde el log se llega a la ficha del componente y, si el problema es la versión desplegada, al rollback desde Releases."
 };
 
 function PlaceholderPage({ title }) {
