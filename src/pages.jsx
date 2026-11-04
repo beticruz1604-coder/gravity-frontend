@@ -1949,6 +1949,9 @@ function auditRows(events, operations) {
     result: e.kind === "negado" ? "Negado" : "Permitido",
     duration: undefined
   }));
+  // Un mismo nombre para cada persona en toda la tabla: el de sus operaciones, si las tiene.
+  const names = new Map(ops.map((o) => [o.user?.ref, o.user?.name]));
+  for (const e of evs) if (names.get(e.user?.ref)) e.user = { ...e.user, name: names.get(e.user.ref) };
   return [...ops, ...evs].sort((a, b) => (a.at < b.at ? 1 : -1));
 }
 
@@ -1973,7 +1976,11 @@ function peopleStats(rows) {
     const key = r.user?.ref ?? r.user?.name;
     const p = people.get(key) ?? { ref: key, name: r.user?.name ?? key, roles: new Set(), total: 0, operations: 0, denied: 0, last: r.at };
     p.total += 1;
-    if (r.kind === "operacion") p.operations += 1;
+    if (r.kind === "operacion") {
+      p.operations += 1;
+      // Las operaciones traen el nombre completo del catálogo; los eventos, a veces solo el usuario.
+      if (r.user?.name) p.name = r.user.name;
+    }
     if (r.kind === "negado") p.denied += 1;
     r.roles.forEach((role) => p.roles.add(role));
     if (r.at > p.last) p.last = r.at;
