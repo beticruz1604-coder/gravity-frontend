@@ -42,7 +42,12 @@ export function useAccess() {
         sections: me.sections ?? [],
         admin: Boolean(me.admin),
         managed: Boolean(me.managed),
-        mustChangePassword: Boolean(me.mustChangePassword)
+        mustChangePassword: Boolean(me.mustChangePassword),
+        // Reglas y caducidad de la contraseña (solo cuentas creadas desde GRAVITY).
+        passwordMinLength: me.passwordRules?.minLength ?? 15,
+        passwordExpiresAt: me.passwordExpiresAt,
+        passwordExpired: Boolean(me.passwordExpired),
+        passwordWarnDays: me.passwordWarnDays ?? 10
       });
     } catch (err) {
       // 401: Backstage no reconoce a nadie; es «sin sesión», no un error.

@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 NET=${DOCKER_NETWORK:-pxtest-net}
 docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
-cleanup() { docker rm -f pxtest-stub-deny pxtest-front-deny pxtest-front-caido pxtest-stub pxtest-front pxtest-front-token pxtest-stub-tls pxtest-front-tls pxtest-front-tls-bad pxtest-front-tls-noca >/dev/null 2>&1; docker volume rm -f pxtest-certs pxtest-certs-bad >/dev/null 2>&1; [ "$NET" = "pxtest-net" ] && docker network rm "$NET" >/dev/null 2>&1; true; }
+cleanup() { docker rm -f pxtest-stub-deny pxtest-front-deny pxtest-front-caido pxtest-stub pxtest-front pxtest-front-token pxtest-stub-tls pxtest-front-tls pxtest-front-tls-bad pxtest-front-tls-noca pxtest-stub-tls12 pxtest-front-tls12 >/dev/null 2>&1; docker volume rm -f pxtest-certs pxtest-certs-bad >/dev/null 2>&1; [ "$NET" = "pxtest-net" ] && docker network rm "$NET" >/dev/null 2>&1; true; }
 trap cleanup EXIT
 
 docker build -q -t pxtest-front . >/dev/null || { echo "FALLO: no se pudo construir la imagen"; exit 1; }
@@ -48,6 +48,7 @@ espera 200 POST /backstage/api/catalog/locations
 espera 200 POST /backstage/api/access/users
 espera 200 PATCH /backstage/api/access/users/fidencio.santander
 espera 200 POST /backstage/api/access/users/fidencio.santander/reset-password
+espera 200 POST /backstage/api/access/users/fidencio.santander/unlock
 espera 200 POST /backstage/api/access/me/password
 espera 200 POST /backstage/api/access/products
 espera 403 DELETE /backstage/api/access/products
@@ -118,10 +119,15 @@ docker run -d --name pxtest-stub-tls --network "$NET" --network-alias backstage-
 docker run -d --name pxtest-front-tls --network "$NET" -v pxtest-certs:/etc/backstage-ca:ro -e BACKSTAGE_URL=https://backstage-tls -e BACKSTAGE_HOST=backstage-tls pxtest-front >/dev/null
 docker run -d --name pxtest-front-tls-bad --network "$NET" -v pxtest-certs-bad:/etc/backstage-ca:ro -e BACKSTAGE_URL=https://backstage-tls -e BACKSTAGE_HOST=backstage-tls pxtest-front >/dev/null
 docker run -d --name pxtest-front-tls-noca --network "$NET" -e BACKSTAGE_URL=https://backstage-tls -e BACKSTAGE_HOST=backstage-tls pxtest-front >/dev/null
+# Un servidor que solo habla TLS 1.2 no se acepta: hacia Backstage solo se usa TLS 1.3.
+docker run -d --name pxtest-stub-tls12 --network "$NET" --network-alias backstage-tls12 -v pxtest-certs:/c:ro --entrypoint sh nginx:1.27-alpine -c '
+  printf "server { listen 443 ssl; ssl_protocols TLSv1.2; ssl_certificate /c/server.pem; ssl_certificate_key /c/server.key; location / { default_type application/json; return 200 \"tls-ok\"; } }\n" > /etc/nginx/conf.d/default.conf && exec nginx -g "daemon off;"' >/dev/null
+docker run -d --name pxtest-front-tls12 --network "$NET" -v pxtest-certs:/etc/backstage-ca:ro -e BACKSTAGE_URL=https://backstage-tls12 -e BACKSTAGE_HOST=backstage-tls12 pxtest-front >/dev/null
 sleep 5
 [ "$(cuerpo http://pxtest-front-tls:8080/backstage/api/branching/rules)" = "tls-ok" ] || { echo "FALLO: con la CA correcta no se llega a Backstage por TLS"; fallos=$((fallos + 1)); }
 [ "$(docker run --rm --network "$NET" curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' http://pxtest-front-tls-bad:8080/backstage/api/branching/rules)" = "503" ] || { echo "FALLO: con una CA distinta debería dar 503 (no se habla con el servidor)"; fallos=$((fallos + 1)); }
 [ "$(docker inspect -f '{{.State.Running}}' pxtest-front-tls-noca 2>/dev/null)" = "false" ] || { echo "FALLO: con https y sin CA el contenedor no debería arrancar"; fallos=$((fallos + 1)); }
+[ "$(docker run --rm --network "$NET" curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' http://pxtest-front-tls12:8080/backstage/api/branching/rules)" = "503" ] || { echo "FALLO: con un servidor solo TLS 1.2 debería dar 503"; fallos=$((fallos + 1)); }
 
 # Con Backstage apagado el proxy debe fallar rápido (Cloud Run factura el CPU mientras espera una conexión que no llega).
 docker exec pxtest-front nginx -T 2>/dev/null | grep -q '^ *proxy_connect_timeout 3s;' || { echo "FALLO: falta proxy_connect_timeout 3s en el proxy hacia Backstage"; fallos=$((fallos + 1)); }

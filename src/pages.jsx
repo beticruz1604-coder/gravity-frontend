@@ -1462,6 +1462,7 @@ export function UsersPage() {
       setEditing(null);
     });
   const toggleActive = (user) => run(() => access.updateUser(user.username, { active: !user.active }));
+  const unlock = (user) => run(() => access.unlockUser(user.username));
   const reset = (user) =>
     run(async () => {
       const result = await access.resetPassword(user.username);
@@ -1548,10 +1549,14 @@ export function UsersPage() {
                     {!user.managed
                       ? "Cuenta fija"
                       : !user.active
-                        ? "Desactivada"
-                        : user.mustChangePassword
-                          ? "Contraseña temporal"
-                          : "Activa"}
+                        ? user.disabledForInactivity
+                          ? "Desactivada por inactividad"
+                          : "Desactivada"
+                        : user.locked
+                          ? "Bloqueada por intentos fallidos"
+                          : user.mustChangePassword
+                            ? "Contraseña temporal"
+                            : "Activa"}
                   </td>
                   <td>
                     {user.managed ? (
@@ -1577,6 +1582,7 @@ export function UsersPage() {
                         <button type="button" className="link-button" disabled={busy} onClick={() => toggleActive(user)}>
                           {user.active ? "Desactivar" : "Activar"}
                         </button>
+                        {user.locked && <button type="button" className="link-button" disabled={busy} onClick={() => unlock(user)}>Desbloquear</button>}
                         <button type="button" className="link-button" disabled={busy || !user.active} onClick={() => reset(user)}>Restablecer contraseña</button>
                         <button type="button" className="link-button danger-link" disabled={busy} onClick={() => remove(user)}>Borrar</button>
                       </div>
@@ -1907,7 +1913,16 @@ export function ReleaseManagementPage({ initialReport, tabs }) {
 
 /* --------------------------------------------------------------- Bitácora */
 
-const AUDIT_KIND = { operacion: "Operación", vista: "Vista", consulta: "Consulta", accion: "Acción", negado: "Intento negado" };
+const AUDIT_KIND = { operacion: "Operación", vista: "Vista", consulta: "Consulta", accion: "Acción", negado: "Intento negado", seguridad: "Seguridad" };
+const AUDIT_OUTCOME = { exito: "Éxito", fallo: "Fallo" };
+
+/** Fecha y hora completas de la bitácora: dd/mm/aaaa hh:mm:ss. */
+function formatAuditDate(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 const TASK_STATUS = { completed: "Completada", failed: "Falló", cancelled: "Cancelada", processing: "En curso", open: "En cola", skipped: "Omitida" };
 const AUDIT_PAGE = 100;
 
@@ -1935,6 +1950,7 @@ function auditRows(events, operations) {
     kind: "operacion",
     action: o.title,
     detail: o.component ?? "",
+    ip: "",
     result: TASK_STATUS[o.status] ?? o.status,
     duration: o.durationMs
   }));
@@ -1945,8 +1961,9 @@ function auditRows(events, operations) {
     roles: e.roles ?? [],
     kind: e.kind,
     action: e.action,
-    detail: SECTION_LABEL[e.section] ?? e.section ?? "",
-    result: e.kind === "negado" ? "Negado" : "Permitido",
+    detail: [e.target, SECTION_LABEL[e.section] ?? e.section].filter(Boolean).join(" · "),
+    ip: e.ip ?? "",
+    result: e.kind === "negado" ? "Negado" : e.kind === "seguridad" ? AUDIT_OUTCOME[e.outcome] ?? "—" : "Permitido",
     duration: undefined
   }));
   // Un mismo nombre para cada persona en toda la tabla: el de sus operaciones, si las tiene.
@@ -2054,8 +2071,8 @@ export function BitacoraPage() {
   }, [filters.user, knownPeople]);
 
   const fecha = isoDay(new Date());
-  const EVENT_COLUMNS = ["Fecha", "Persona", "Rol", "Tipo", "Interacción", "Componente o sección", "Resultado", "Duración"];
-  const eventRow = (r) => [formatDate(r.at), r.user?.name ?? "", r.roles.join(", "), AUDIT_KIND[r.kind] ?? r.kind, r.action, r.detail, r.result, r.duration === undefined ? "" : formatDuration(r.duration)];
+  const EVENT_COLUMNS = ["Fecha", "Persona", "Rol", "Tipo", "Interacción", "Componente o sección", "IP de origen", "Resultado", "Duración"];
+  const eventRow = (r) => [formatAuditDate(r.at), r.user?.name ?? "", r.roles.join(", "), AUDIT_KIND[r.kind] ?? r.kind, r.action, r.detail, r.ip, r.result, r.duration === undefined ? "" : formatDuration(r.duration)];
   const exportar = (format) => {
     if (format === "csv") {
       download(csvBlob({ columns: EVENT_COLUMNS, rows: rows.map(eventRow) }), `bitacora-${fecha}.csv`);
@@ -2077,7 +2094,7 @@ export function BitacoraPage() {
       <Heading
         eyebrow="GOBIERNO"
         title="Bitácora"
-        description="Cada interacción con la plataforma: operaciones (ramas, pull requests, despliegues, servicios nuevos), consultas, secciones abiertas e intentos que el rol no permite. Quién, cuándo, cuántas veces y cuánto tardó."
+        description="Cada interacción con la plataforma: operaciones (ramas, pull requests, despliegues, servicios nuevos), consultas, secciones abiertas, intentos que el rol no permite, inicios de sesión y cambios de cuentas. Quién, cuándo, desde qué IP, con qué resultado y cuánto tardó."
         actions={
           <>
             <button type="button" className="create-button" disabled={!rows.length} onClick={() => exportar("xlsx")}>Exportar Excel</button>
@@ -2173,12 +2190,13 @@ export function BitacoraPage() {
               {rows.length === 0 && <EmptyRow colSpan={EVENT_COLUMNS.length} loading={loader.loading && !loader.data}>{active ? "Ninguna interacción cumple los filtros." : "Sin interacciones en el periodo."}</EmptyRow>}
               {rows.slice(0, limit).map((r) => (
                 <tr key={r.id}>
-                  <td>{formatDate(r.at)}</td>
+                  <td>{formatAuditDate(r.at)}</td>
                   <td>{r.user?.name ?? "—"}</td>
                   <td>{r.roles.join(", ") || "—"}</td>
                   <td><span className={`audit-kind audit-kind-${r.kind}`}>{AUDIT_KIND[r.kind] ?? r.kind}</span></td>
                   <td>{r.action}</td>
                   <td>{r.detail || "—"}</td>
+                  <td>{r.ip || "—"}</td>
                   <td>{r.result}</td>
                   <td>{r.duration === undefined ? "—" : formatDuration(r.duration)}</td>
                 </tr>
