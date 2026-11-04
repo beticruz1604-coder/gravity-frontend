@@ -168,6 +168,12 @@ textarea {
   font-size: 13px;
 }
 
+.password-expiry {
+  padding: 2px 10px 4px;
+  color: #f5b041;
+  font-size: 12px;
+}
+
 .user-circle {
   width: 30px;
   height: 30px;
@@ -3375,4 +3381,9 @@ td.wrap {
 .audit-kind-negado {
   background: #3a1820;
   color: #ff9aa8;
+}
+
+.audit-kind-seguridad {
+  background: #3a2c10;
+  color: #f5c46b;
 }

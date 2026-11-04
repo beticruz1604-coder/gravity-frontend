@@ -25,7 +25,7 @@ const ana = { ref: "user:default/ana", name: "Ana López" };
 const leo = { ref: "user:default/leo", name: "Leo Ruiz" };
 const events = [
   { id: "e1", at: at(5), user: ana, roles: ["Ingeniero SCM"], kind: "consulta", action: "Simulación de integración", section: "Compliance IQ" },
-  { id: "e2", at: at(10), user: leo, roles: ["Líder Técnico"], kind: "negado", action: "Inicio de operación" },
+  { id: "e2", at: at(10), user: leo, roles: ["Líder Técnico"], kind: "negado", action: "Inicio de operación", ip: "203.0.113.9", outcome: "fallo" },
   { id: "e3", at: at(15), user: ana, roles: ["Ingeniero SCM"], kind: "vista", action: "Abrió Pipeline Engine (IDP)", section: "Pipeline Engine (IDP)" }
 ];
 const operations = [
@@ -77,6 +77,8 @@ espera(first.includes("Consulta") && first.includes("Simulación de integración
 const tabla = await page.locator('[data-testid="audit-table"]').innerText();
 espera(tabla.includes("Autoservicio"), "la sección se muestra con su nombre visible");
 espera(tabla.includes("Intento negado") && tabla.includes("Falló"), "faltan el intento negado o la operación fallida");
+espera(tabla.includes("203.0.113.9"), "falta la IP de origen del intento negado");
+espera(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}/.test(tabla), "la fecha de la bitácora debe ser dd/mm/aaaa hh:mm:ss");
 espera(activity.includes("Resumen") && activity.includes("Bitácora"), `no avisó las secciones abiertas: ${activity}`);
 espera(queries[0]?.from?.length === 10, `el periodo por defecto no llegó a la API: ${JSON.stringify(queries[0])}`);
 

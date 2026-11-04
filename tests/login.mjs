@@ -23,7 +23,7 @@ const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
 const jwt = (exp) => `${b64({ alg: "none" })}.${b64({ exp })}.x`;
 const VALID = Buffer.from("ana:clave-correcta").toString("base64");
 const NUEVO = Buffer.from("nuevo.usuario:Temporal1234567").toString("base64");
-const NUEVO_CAMBIADA = Buffer.from("nuevo.usuario:NuevaClave2026").toString("base64");
+const NUEVO_CAMBIADA = Buffer.from("nuevo.usuario:Nueva-Clave-2026!").toString("base64");
 
 const fallos = [];
 const espera = (cond, msg) => cond || fallos.push(msg);
@@ -62,7 +62,7 @@ await page.route("**/backstage/**", (route) => {
   }
   if (url.includes("/api/access/me")) {
     if (headers.authorization?.startsWith("Bearer ") && quien === "nuevo") {
-      return json(200, { authenticated: true, roles: [{ id: "scm", name: "Ingeniero SCM" }], sections: temporal ? [] : ["Resumen", "Repositories"], admin: false, managed: true, mustChangePassword: temporal });
+      return json(200, { authenticated: true, roles: [{ id: "scm", name: "Ingeniero SCM" }], sections: temporal ? [] : ["Resumen", "Repositories"], admin: false, managed: true, mustChangePassword: temporal, passwordRules: { minLength: 15 }, passwordExpiresAt: new Date(Date.now() + 5 * 86400000).toISOString(), passwordWarnDays: 10 });
     }
     return headers.authorization?.startsWith("Bearer ")
       ? json(200, { authenticated: true, roles: [{ id: "scm", name: "Ingeniero SCM" }], sections: ["Resumen", "Repositories"], admin: false })
@@ -127,15 +127,16 @@ await page.waitForSelector("text=Elige tu contraseña", { timeout: 15000 });
 espera((await page.locator(".sidebar nav button").count()) === 0, "Temporal: no debe verse el menú antes de cambiar la contraseña");
 const campos = page.locator('form.login-form input[type="password"]');
 await campos.nth(0).fill("Temporal1234567");
-await campos.nth(1).fill("NuevaClave2026");
-await campos.nth(2).fill("OtraDistinta2026");
+await campos.nth(1).fill("Nueva-Clave-2026!");
+await campos.nth(2).fill("Otra-Distinta-2026!");
 await page.click('button[type="submit"]');
 await page.waitForSelector('[role="alert"]');
 espera((await page.locator('[role="alert"]').innerText()).includes("no coinciden"), "Temporal: falta el aviso de contraseñas distintas");
-await campos.nth(2).fill("NuevaClave2026");
+await campos.nth(2).fill("Nueva-Clave-2026!");
 await page.click('button[type="submit"]');
 await page.waitForSelector(".sidebar nav button", { timeout: 15000 });
 espera((await page.locator(".sidebar").innerText()).includes("Cambiar contraseña"), "Temporal: falta «Cambiar contraseña» en la barra lateral");
+espera((await page.locator(".sidebar").innerText()).includes("Tu contraseña vence en 5 días."), "Falta el aviso de caducidad de la contraseña");
 // «Cerrar sesión» debe quedar dentro de la barra lateral y visible, también junto a «Cambiar contraseña».
 for (const texto of ["Cambiar contraseña", "Cerrar sesión"]) {
   const caja = await page.locator(".sidebar button", { hasText: texto }).boundingBox();

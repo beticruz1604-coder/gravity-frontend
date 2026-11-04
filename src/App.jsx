@@ -271,6 +271,7 @@ function Sidebar({ selectedPage, onNavigate, access, onChangePassword }) {
                 <span>Cambiar contraseña</span>
               </button>
             )}
+            {access.managed && <PasswordExpiry access={access} />}
             <button type="button" className="menu-item" onClick={access.signOut}>
               <LogOut size={15} strokeWidth={1.8} />
               <span>Cerrar sesión</span>
@@ -364,9 +365,18 @@ function LoginScreen({ access }) {
   );
 }
 
+/** Aviso en la barra lateral cuando la contraseña vence en los próximos días. */
+function PasswordExpiry({ access }) {
+  if (!access.passwordExpiresAt) return null;
+  const days = Math.ceil((Date.parse(access.passwordExpiresAt) - Date.now()) / 86400000);
+  if (days > access.passwordWarnDays) return null;
+  return <small className="password-expiry" role="status">{days <= 1 ? "Tu contraseña vence hoy." : `Tu contraseña vence en ${days} días.`}</small>;
+}
+
 /** Cambio de contraseña a pantalla completa: obligatorio con una contraseña temporal, opcional desde la barra lateral. */
 function ChangePasswordScreen({ access, onDone }) {
   const forced = access.mustChangePassword;
+  const minLength = access.passwordMinLength ?? 15;
   const [current, setCurrent] = React.useState("");
   const [next, setNext] = React.useState("");
   const [repeat, setRepeat] = React.useState("");
@@ -398,20 +408,25 @@ function ChangePasswordScreen({ access, onDone }) {
         </div>
         <h1>{forced ? "Elige tu contraseña" : "Cambiar contraseña"}</h1>
         <p className="login-hint">
-          {forced ? "Entraste con una contraseña temporal. Elige una propia para continuar." : "Escribe tu contraseña actual y la nueva."} Al menos 12 caracteres, con letras y números.
+          {forced
+            ? access.passwordExpired
+              ? "Tu contraseña caducó. Elige una nueva para continuar."
+              : "Entraste con una contraseña temporal. Elige una propia para continuar."
+            : "Escribe tu contraseña actual y la nueva."}{" "}
+          Al menos {minLength} caracteres, con mayúsculas, minúsculas, números y algún carácter especial. No puede incluir tu usuario, tu nombre ni la palabra Coppel, ni repetir una de tus últimas 24 contraseñas.
         </p>
         <form className="login-form" onSubmit={submit}>
           <label>
-            {forced ? "Contraseña temporal" : "Contraseña actual"}
+            {forced && !access.passwordExpired ? "Contraseña temporal" : "Contraseña actual"}
             <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" autoFocus required />
           </label>
           <label>
             Contraseña nueva
-            <input type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" minLength={12} required />
+            <input type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" minLength={minLength} required />
           </label>
           <label>
             Repite la contraseña nueva
-            <input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} autoComplete="new-password" minLength={12} required />
+            <input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} autoComplete="new-password" minLength={minLength} required />
           </label>
           {error && <p role="alert" className="login-error">{error}</p>}
           <button type="submit" className="primary-button login-submit" disabled={busy}>{busy ? "Guardando…" : "Guardar contraseña"}</button>

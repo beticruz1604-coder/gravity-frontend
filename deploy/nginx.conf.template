@@ -45,7 +45,7 @@ map "$request_method $uri $args" $ruta_permitida {
 
   ~^POST\ /backstage/api/scaffolder/v2/(tasks|tasks/[^/]+/cancel)\ .*$ 1;
   # Administración de usuarios (Backstage exige Admin) y cambio de la propia contraseña.
-  ~^POST\ /backstage/api/access/(users|users/[a-z]+\.[a-z]+/reset-password|me/password|products|activity)\ .*$ 1;
+  ~^POST\ /backstage/api/access/(users|users/[a-z]+\.[a-z]+/(reset-password|unlock)|me/password|products|activity)\ .*$ 1;
   ~^(PATCH|DELETE)\ /backstage/api/access/users/[a-z]+\.[a-z]+\ .*$ 1;
   ~^POST\ /backstage/api/branching/(preview|branch-name|validate)\ .*$ 1;
   ~^POST\ /backstage/api/kubernetes/services/[^/]+\ .*$ 1;
@@ -73,6 +73,8 @@ server {
     proxy_set_header Authorization $backstage_authorization;
     proxy_set_header X-Original-Uri $ruta_original;
     proxy_set_header X-Original-Method $request_method;
+    # IP de la persona para la bitácora (la de Cloud Run, ya resuelta arriba con real_ip).
+    proxy_set_header X-Real-IP $remote_addr;
     proxy_connect_timeout 3s;
     proxy_read_timeout 15s;
   }
@@ -108,6 +110,7 @@ server {
     include /etc/nginx/snippets/backstage-tls.conf;
     proxy_set_header Host ${BACKSTAGE_HOST};
     proxy_set_header Authorization $backstage_authorization;
+    proxy_set_header X-Real-IP $remote_addr;
     # Con Backstage apagado (la VM se apaga para ahorrar) la conexión no debe quedarse esperando: Cloud Run factura el CPU
     # mientras la petición está abierta, y las comprobaciones de disponibilidad la repiten cada 5 minutos desde varias regiones.
     proxy_connect_timeout 3s;

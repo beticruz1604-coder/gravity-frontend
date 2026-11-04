@@ -17,7 +17,8 @@ case "${BACKSTAGE_URL:-}" in
 proxy_ssl_verify on;
 proxy_ssl_verify_depth 2;
 proxy_ssl_trusted_certificate $CA;
-proxy_ssl_protocols TLSv1.2 TLSv1.3;
+# Solo TLS 1.3: es lo que pide el Estándar para la Gestión de Recursos Criptográficos (005-COP-EST-V004, 6.6) en proyectos nuevos.
+proxy_ssl_protocols TLSv1.3;
 # Nombre con el que se valida el certificado (el de la CA privada lo incluye además de la IP interna).
 proxy_ssl_name ${BACKSTAGE_TLS_NAME:-backstage.internal};
 CONF
