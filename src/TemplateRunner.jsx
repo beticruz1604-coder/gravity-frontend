@@ -1214,7 +1214,7 @@ export function TemplateModal({ onClose, template, preset, filter, title = "Crea
       <div className="create-modal" role="dialog" aria-modal="true">
         <div className="create-modal-header">
           <div>
-            <span className="module-eyebrow">PIPELINE ENGINE · BACKSTAGE</span>
+            <span className="module-eyebrow">AUTOSERVICIO · GRAVITY</span>
             <h2>{taskId ? "Ejecución de la tarea" : (selectedTitle ?? title)}</h2>
             <p>
               {taskId
