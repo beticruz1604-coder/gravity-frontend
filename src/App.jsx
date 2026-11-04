@@ -31,12 +31,14 @@ import {
   Loader2,
   ExternalLink,
   UploadCloud,
-  Library
+  Library,
+  ScrollText
 } from "lucide-react";
 
 import "./App.css";
 
 import {
+  access as accessApi,
   branching,
   catalog,
   scaffolder,
@@ -67,6 +69,7 @@ import {
   ReleasesPage,
   ReleaseManagementPage,
   TechDebtPage,
+  BitacoraPage,
   ComplianceIqPage,
   SummaryPage,
   ToolsHealthPage
@@ -94,6 +97,7 @@ const menuItems = [
   { name: "Insights", icon: BarChart3 },
   { name: "Error Analytics", icon: AlertTriangle },
   { name: "Log Analyzer", icon: FileSearch },
+  { name: "Bitácora", icon: ScrollText },
   { name: "Usuarios", icon: Users }
 ];
 
@@ -2310,6 +2314,11 @@ function App() {
   const blocked = access.loading || access.sections.length === 0 || needsLogin;
   const showPages = !entityRef && !blocked;
 
+  // Bitácora: cada sección que se abre cuenta como interacción.
+  React.useEffect(() => {
+    if (showPages) accessApi.activity(selectedPage);
+  }, [showPages, selectedPage]);
+
   const navigate = React.useCallback(
     (page) => {
       setEntityRef(null);
@@ -2466,6 +2475,10 @@ function App() {
             <PipelineEnginePage />
           )}
 
+          {showPages && selectedPage === "Bitácora" && (
+            <BitacoraPage />
+          )}
+
           {showPages && selectedPage === "Usuarios" && access.admin && (
             <UsersPage />
           )}
@@ -2483,6 +2496,7 @@ function App() {
             "Tools Health",
             "Homologation Status",
             "Pipeline Engine (IDP)",
+            "Bitácora",
             "Usuarios"
           ].includes(
             selectedPage

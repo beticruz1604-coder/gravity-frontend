@@ -30,7 +30,7 @@ await page.route("**/backstage/**", (route) => {
   const url = route.request().url();
   if (url.includes("/api/access/me")) {
     // Admin: todas las secciones (la prueba de humo recorre el menú completo).
-    const secciones = ["Resumen", "Catálogo", "Soporte DevSecOps", "Insights", "Repositories", "Pipelines", "Releases", "Release Management", "TechDebt", "Pool de Agentes", "Compliance IQ", "Error Analytics", "Tools Health", "Log Analyzer", "Homologation Status", "Pipeline Engine (IDP)", "Usuarios"];
+    const secciones = ["Resumen", "Catálogo", "Soporte DevSecOps", "Insights", "Repositories", "Pipelines", "Releases", "Release Management", "TechDebt", "Pool de Agentes", "Compliance IQ", "Error Analytics", "Tools Health", "Log Analyzer", "Homologation Status", "Pipeline Engine (IDP)", "Bitácora", "Usuarios"];
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true, roles: [], sections: secciones, admin: true }) });
   }
   if (url.includes("/api/auth/")) return route.fulfill({ status: 403, contentType: "application/json", body: "{}" });

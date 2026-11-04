@@ -88,6 +88,8 @@ const SECTION_LABEL = {
   "Release Management": "Releases · Informes de liberación"
 };
 
+export { SECTION_LABEL };
+
 function Heading({ eyebrow, title, description, actions }) {
   return (
     <div className="module-heading">
@@ -1898,6 +1900,289 @@ export function ReleaseManagementPage({ initialReport, tabs }) {
           <div className="rm-more"><button className="link-button" onClick={() => setLimit(limit + RM_PAGE)}>Ver más ({items.length} de {total})</button></div>
         )}
         <Footer loader={loader} source="Informes de liberación" />
+      </div>
+    </section>
+  );
+}
+
+/* --------------------------------------------------------------- Bitácora */
+
+const AUDIT_KIND = { operacion: "Operación", vista: "Vista", consulta: "Consulta", accion: "Acción", negado: "Intento negado" };
+const TASK_STATUS = { completed: "Completada", failed: "Falló", cancelled: "Cancelada", processing: "En curso", open: "En cola", skipped: "Omitida" };
+const AUDIT_PAGE = 100;
+
+const isoDay = (d) => d.toISOString().slice(0, 10);
+const daysAgo = (n) => isoDay(new Date(Date.now() - n * 86400000));
+
+function formatDuration(ms) {
+  if (ms === undefined || ms === null) return "—";
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ${s % 60} s`;
+  return `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+
+const average = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : undefined);
+
+/** Une las operaciones y los eventos en una sola lista, de lo más reciente a lo más antiguo. */
+function auditRows(events, operations) {
+  const ops = operations.map((o) => ({
+    id: `op-${o.id}`,
+    at: o.createdAt,
+    user: o.user,
+    roles: [],
+    kind: "operacion",
+    action: o.title,
+    detail: o.component ?? "",
+    result: TASK_STATUS[o.status] ?? o.status,
+    duration: o.durationMs
+  }));
+  const evs = events.map((e) => ({
+    id: e.id ?? `${e.at}-${e.action}`,
+    at: e.at,
+    user: e.user,
+    roles: e.roles ?? [],
+    kind: e.kind,
+    action: e.action,
+    detail: SECTION_LABEL[e.section] ?? e.section ?? "",
+    result: e.kind === "negado" ? "Negado" : "Permitido",
+    duration: undefined
+  }));
+  return [...ops, ...evs].sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+
+/** Operaciones por tipo: cuántas, cómo terminaron y cuánto tardan. */
+function operationStats(operations) {
+  const groups = new Map();
+  for (const o of operations) {
+    const g = groups.get(o.title) ?? { title: o.title, total: 0, completed: 0, failed: 0, durations: [] };
+    g.total += 1;
+    if (o.status === "completed") g.completed += 1;
+    if (o.status === "failed") g.failed += 1;
+    if (o.durationMs !== undefined) g.durations.push(o.durationMs);
+    groups.set(o.title, g);
+  }
+  return [...groups.values()].sort((a, b) => b.total - a.total).map((g) => ({ ...g, avg: average(g.durations), max: g.durations.length ? Math.max(...g.durations) : undefined }));
+}
+
+/** Actividad por persona: interacciones (eventos y operaciones), operaciones y última actividad. */
+function peopleStats(rows) {
+  const people = new Map();
+  for (const r of rows) {
+    const key = r.user?.ref ?? r.user?.name;
+    const p = people.get(key) ?? { ref: key, name: r.user?.name ?? key, roles: new Set(), total: 0, operations: 0, denied: 0, last: r.at };
+    p.total += 1;
+    if (r.kind === "operacion") p.operations += 1;
+    if (r.kind === "negado") p.denied += 1;
+    r.roles.forEach((role) => p.roles.add(role));
+    if (r.at > p.last) p.last = r.at;
+    people.set(key, p);
+  }
+  return [...people.values()].sort((a, b) => b.total - a.total).map((p) => ({ ...p, roles: [...p.roles].join(", ") }));
+}
+
+/** Interacciones por día, del más reciente al más antiguo. */
+function dailyStats(rows) {
+  const days = new Map();
+  for (const r of rows) {
+    const day = new Date(r.at).toLocaleDateString("en-CA");
+    const d = days.get(day) ?? { day, total: 0, operations: 0 };
+    d.total += 1;
+    if (r.kind === "operacion") d.operations += 1;
+    days.set(day, d);
+  }
+  return [...days.values()].sort((a, b) => (a.day < b.day ? 1 : -1));
+}
+
+export function BitacoraPage() {
+  const [filters, setFilters] = React.useState({ from: daysAgo(30), to: "", user: "", kind: "", q: "" });
+  const [search, setSearch] = React.useState("");
+  const [limit, setLimit] = React.useState(AUDIT_PAGE);
+  React.useEffect(() => {
+    const t = setTimeout(() => setFilters((f) => (f.q === search ? f : { ...f, q: search })), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+  const key = JSON.stringify(filters);
+  const loader = useData(async () => {
+    const { from, to, user, kind, q } = filters;
+    const wantsOps = !kind || kind === "operacion";
+    const wantsEvents = kind !== "operacion";
+    const [events, operations] = await Promise.all([
+      wantsEvents ? access.auditEvents({ from, to, user, kind, q, limit: 500 }) : Promise.resolve({ total: 0, items: [] }),
+      wantsOps ? access.auditOperations({ from, to, user }) : Promise.resolve({ total: 0, items: [] })
+    ]);
+    // La búsqueda libre en las operaciones se aplica aquí (la de los eventos la hace la API).
+    const text = q.trim().toLowerCase();
+    const items = operations.items ?? [];
+    const ops = text ? items.filter((o) => [o.title, o.user?.name, o.component].some((v) => String(v ?? "").toLowerCase().includes(text))) : items;
+    return { events, operations: ops };
+  }, { interval: 60000 });
+  const reload = loader.reload;
+  const firstKey = React.useRef(key);
+  React.useEffect(() => {
+    if (firstKey.current === key) return;
+    firstKey.current = null;
+    setLimit(AUDIT_PAGE);
+    reload();
+  }, [key, reload]);
+
+  const events = loader.data?.events?.items ?? [];
+  const operations = loader.data?.operations ?? [];
+  const rows = auditRows(events, operations);
+  const byOperation = operationStats(operations);
+  const people = peopleStats(rows);
+  const daily = dailyStats(rows);
+  const finished = operations.filter((o) => ["completed", "failed", "cancelled"].includes(o.status));
+  const success = finished.length ? Math.round((finished.filter((o) => o.status === "completed").length / finished.length) * 100) : undefined;
+  const truncated = (loader.data?.events?.total ?? 0) > events.length;
+  const maxDay = Math.max(1, ...daily.map((d) => d.total));
+  const set = (name) => (e) => setFilters({ ...filters, [name]: e.target.value });
+  const active = filters.user || filters.kind || filters.q || filters.to || filters.from !== daysAgo(30);
+  // Personas que aparecen en el periodo, para el filtro.
+  const knownPeople = React.useMemo(() => people.map((p) => [p.ref, p.name]), [people]);
+  const [peopleOptions, setPeopleOptions] = React.useState([]);
+  React.useEffect(() => {
+    if (!filters.user) setPeopleOptions(knownPeople);
+  }, [filters.user, knownPeople]);
+
+  const fecha = isoDay(new Date());
+  const EVENT_COLUMNS = ["Fecha", "Persona", "Rol", "Tipo", "Interacción", "Componente o sección", "Resultado", "Duración"];
+  const eventRow = (r) => [formatDate(r.at), r.user?.name ?? "", r.roles.join(", "), AUDIT_KIND[r.kind] ?? r.kind, r.action, r.detail, r.result, r.duration === undefined ? "" : formatDuration(r.duration)];
+  const exportar = (format) => {
+    if (format === "csv") {
+      download(csvBlob({ columns: EVENT_COLUMNS, rows: rows.map(eventRow) }), `bitacora-${fecha}.csv`);
+      return;
+    }
+    download(
+      xlsxBlob([
+        { name: "Interacciones", columns: EVENT_COLUMNS, rows: rows.map(eventRow) },
+        { name: "Operaciones por tipo", columns: ["Operación", "Veces", "Completadas", "Fallidas", "Tiempo promedio", "Tiempo máximo"], rows: byOperation.map((g) => [g.title, g.total, g.completed, g.failed, formatDuration(g.avg), formatDuration(g.max)]) },
+        { name: "Actividad por persona", columns: ["Persona", "Rol", "Interacciones", "Operaciones", "Intentos negados", "Última actividad"], rows: people.map((p) => [p.name, p.roles, p.total, p.operations, p.denied, formatDate(p.last)]) },
+        { name: "Por día", columns: ["Día", "Interacciones", "Operaciones"], rows: daily.map((d) => [d.day, d.total, d.operations]) }
+      ]),
+      `bitacora-${fecha}.xlsx`
+    );
+  };
+
+  return (
+    <section className="module-page">
+      <Heading
+        eyebrow="GOBIERNO"
+        title="Bitácora"
+        description="Cada interacción con la plataforma: operaciones (ramas, pull requests, despliegues, servicios nuevos), consultas, secciones abiertas e intentos que el rol no permite. Quién, cuándo, cuántas veces y cuánto tardó."
+        actions={
+          <>
+            <button type="button" className="create-button" disabled={!rows.length} onClick={() => exportar("xlsx")}>Exportar Excel</button>
+            <button type="button" className="create-button" disabled={!rows.length} onClick={() => exportar("csv")}>Exportar CSV</button>
+          </>
+        }
+      />
+      <Stats
+        items={[
+          ["Interacciones", loader.data ? rows.length : "—"],
+          ["Operaciones", loader.data ? operations.length : "—"],
+          ["Personas", loader.data ? people.length : "—"],
+          ["Tiempo promedio por operación", loader.data ? formatDuration(average(finished.map((o) => o.durationMs).filter((v) => v !== undefined))) : "—"],
+          ["Operaciones exitosas", success === undefined ? "—" : `${success}%`],
+          ["Intentos negados", loader.data ? rows.filter((r) => r.kind === "negado").length : "—"]
+        ]}
+      />
+      <div className="module-panel">
+        <div className="pipeline-toolbar rm-filters" data-testid="audit-filters">
+          <div className="search-input-wrapper">
+            <Search size={16} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por persona, interacción o componente..." />
+          </div>
+          <select value={filters.kind} onChange={set("kind")} aria-label="Tipo de interacción">
+            <option value="">Todos los tipos</option>
+            {Object.entries(AUDIT_KIND).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+          <select value={filters.user} onChange={set("user")} aria-label="Persona">
+            <option value="">Todas las personas</option>
+            {peopleOptions.map(([ref, name]) => <option key={ref} value={ref}>{name}</option>)}
+          </select>
+          <label className="inline-check">Desde <input type="date" value={filters.from} onChange={set("from")} /></label>
+          <label className="inline-check">Hasta <input type="date" value={filters.to} onChange={set("to")} /></label>
+          {active && <button className="link-button" onClick={() => { setSearch(""); setFilters({ from: daysAgo(30), to: "", user: "", kind: "", q: "" }); }}>Limpiar filtros</button>}
+          <Refresh loader={loader} />
+        </div>
+        <ErrorBox message={loader.error && `No fue posible consultar la bitácora. ${loader.error}`} />
+        {truncated && <div className="module-error">Se muestran los 500 eventos más recientes del periodo; acota las fechas para ver el resto.</div>}
+      </div>
+
+      <div className="audit-grid">
+        <div className="module-panel">
+          <div className="panel-title"><strong>Operaciones por tipo</strong><small>Cuántas veces se usó cada una y cuánto tarda</small></div>
+          <div className="table-wrapper">
+            <table className="pool-table" data-testid="audit-operations">
+              <thead><tr><th>Operación</th><th>Veces</th><th>Completadas</th><th>Fallidas</th><th>Promedio</th><th>Máximo</th></tr></thead>
+              <tbody>
+                {byOperation.length === 0 && <EmptyRow colSpan={6} loading={loader.loading && !loader.data}>Sin operaciones en el periodo.</EmptyRow>}
+                {byOperation.map((g) => (
+                  <tr key={g.title}><td>{g.title}</td><td>{g.total}</td><td>{g.completed}</td><td>{g.failed}</td><td>{formatDuration(g.avg)}</td><td>{formatDuration(g.max)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="module-panel">
+          <div className="panel-title"><strong>Actividad por persona</strong><small>Interacciones en el periodo</small></div>
+          <div className="table-wrapper">
+            <table className="pool-table" data-testid="audit-people">
+              <thead><tr><th>Persona</th><th>Rol</th><th>Interacciones</th><th>Operaciones</th><th>Negados</th><th>Última actividad</th></tr></thead>
+              <tbody>
+                {people.length === 0 && <EmptyRow colSpan={6} loading={loader.loading && !loader.data}>Sin actividad en el periodo.</EmptyRow>}
+                {people.map((p) => (
+                  <tr key={p.ref}><td>{p.name}</td><td>{p.roles || "—"}</td><td>{p.total}</td><td>{p.operations}</td><td>{p.denied}</td><td>{formatDate(p.last)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div className="module-panel">
+        <div className="panel-title"><strong>Interacciones por día</strong><small>Total y operaciones</small></div>
+        <div className="audit-days" data-testid="audit-days">
+          {daily.length === 0 && <div className="empty-table">{loader.loading && !loader.data ? "Consultando información..." : "Sin actividad en el periodo."}</div>}
+          {daily.map((d) => (
+            <div className="audit-day" key={d.day}>
+              <span>{d.day}</span>
+              <div className="audit-bar"><div style={{ width: `${(d.total / maxDay) * 100}%` }} /></div>
+              <strong>{d.total}</strong>
+              <small>{d.operations} operaciones</small>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="module-panel">
+        <div className="panel-title"><strong>Interacciones</strong><small>De la más reciente a la más antigua</small></div>
+        <div className="table-wrapper">
+          <table className="pool-table" data-testid="audit-table">
+            <thead><tr>{EVENT_COLUMNS.map((c) => <th key={c}>{c}</th>)}</tr></thead>
+            <tbody>
+              {rows.length === 0 && <EmptyRow colSpan={EVENT_COLUMNS.length} loading={loader.loading && !loader.data}>{active ? "Ninguna interacción cumple los filtros." : "Sin interacciones en el periodo."}</EmptyRow>}
+              {rows.slice(0, limit).map((r) => (
+                <tr key={r.id}>
+                  <td>{formatDate(r.at)}</td>
+                  <td>{r.user?.name ?? "—"}</td>
+                  <td>{r.roles.join(", ") || "—"}</td>
+                  <td><span className={`audit-kind audit-kind-${r.kind}`}>{AUDIT_KIND[r.kind] ?? r.kind}</span></td>
+                  <td>{r.action}</td>
+                  <td>{r.detail || "—"}</td>
+                  <td>{r.result}</td>
+                  <td>{r.duration === undefined ? "—" : formatDuration(r.duration)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {rows.length > limit && (
+          <div className="rm-more"><button className="link-button" onClick={() => setLimit(limit + AUDIT_PAGE)}>Ver más ({limit} de {rows.length})</button></div>
+        )}
+        <Footer loader={loader} source="Bitácora de GRAVITY" />
       </div>
     </section>
   );
