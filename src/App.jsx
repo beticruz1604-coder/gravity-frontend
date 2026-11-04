@@ -31,8 +31,7 @@ import {
   Loader2,
   ExternalLink,
   UploadCloud,
-  Library,
-  ClipboardCheck
+  Library
 } from "lucide-react";
 
 import "./App.css";
@@ -51,7 +50,7 @@ import {
   PipelineStatus,
   TaskStatus
 } from "./status";
-import { NavContext, useNav } from "./nav";
+import { NavContext } from "./nav";
 import { NewVersionBanner } from "./version";
 import { initials, useAccess, useIdentity } from "./identity";
 import { INTERACTIVE_SIGN_IN } from "./backstage";
@@ -77,25 +76,28 @@ import {
 
 /*MENU*/
 
+// `name` es la sección que da el backend (también es la llave de permisos); `label`, el nombre que se muestra.
+// Releases agrupa dos secciones del backend, cada una en su pestaña.
 const menuItems = [
   { name: "Resumen", icon: LayoutDashboard },
   { name: "Catálogo", icon: Library },
-  { name: "Soporte DevSecOps", icon: Headset },
-  { name: "Insights", icon: BarChart3 },
+  { name: "Pipeline Engine (IDP)", label: "Autoservicio", icon: GitPullRequest },
+  { name: "Releases", icon: Rocket, pages: ["Releases", "Release Management"] },
+  { name: "Homologation Status", icon: CheckCircle },
+  { name: "Compliance IQ", icon: ShieldCheck },
   { name: "Repositories", icon: GitBranch },
   { name: "Pipelines", icon: Workflow },
-  { name: "Releases", icon: Rocket },
-  { name: "Release Management", icon: ClipboardCheck },
-  { name: "TechDebt", icon: Bug },
   { name: "Pool de Agentes", icon: Activity },
-  { name: "Compliance IQ", icon: ShieldCheck },
-  { name: "Error Analytics", icon: AlertTriangle },
+  { name: "TechDebt", icon: Bug },
   { name: "Tools Health", icon: Wrench },
+  { name: "Soporte DevSecOps", icon: Headset },
+  { name: "Insights", icon: BarChart3 },
+  { name: "Error Analytics", icon: AlertTriangle },
   { name: "Log Analyzer", icon: FileSearch },
-  { name: "Homologation Status", icon: CheckCircle },
-  { name: "Pipeline Engine (IDP)", icon: GitPullRequest },
   { name: "Usuarios", icon: Users }
 ];
+
+const RELEASE_TABS = [["Releases", "Ambientes"], ["Release Management", "Informes de liberación"]];
 
 /* NORMALIZADORES
    Permiten que el frontend pueda recibir diferentes nombres
@@ -212,7 +214,11 @@ function normalizePipeline(item = {}) {
 
 function Sidebar({ selectedPage, onNavigate, access, onChangePassword }) {
   const identity = useIdentity(access.authenticated);
-  const visible = INTERACTIVE_SIGN_IN && !access.authenticated ? [] : menuItems.filter((item) => access.sections.includes(item.name));
+  const visible = INTERACTIVE_SIGN_IN && !access.authenticated
+    ? []
+    : menuItems
+        .map((item) => ({ ...item, allowed: (item.pages ?? [item.name]).filter((page) => access.sections.includes(page)) }))
+        .filter((item) => item.allowed.length > 0);
   return (
     <aside className="sidebar">
       <div className="logo">
@@ -223,7 +229,7 @@ function Sidebar({ selectedPage, onNavigate, access, onChangePassword }) {
       <nav className="menu">
         {visible.map((item) => {
           const Icon = item.icon;
-          const isActive = selectedPage === item.name;
+          const isActive = (item.pages ?? [item.name]).includes(selectedPage);
 
           return (
             <button
@@ -232,14 +238,14 @@ function Sidebar({ selectedPage, onNavigate, access, onChangePassword }) {
               className={`menu-item ${
                 isActive ? "active" : ""
               }`}
-              onClick={() => onNavigate(item.name)}
+              onClick={() => onNavigate(item.allowed[0])}
             >
               <Icon
                 size={17}
                 strokeWidth={1.8}
               />
 
-              <span>{item.name}</span>
+              <span>{item.label ?? item.name}</span>
             </button>
           );
         })}
@@ -1591,13 +1597,13 @@ function PipelineEnginePage() {
           </span>
 
           <h1>
-            Pipeline Engine (IDP)
+            Autoservicio
           </h1>
 
           <p>
-            Consulta pipelines, revisa su
-            configuración y simula el flujo
-            de ejecución de una entrega.
+            Crea servicios con los Golden Paths,
+            ramas e integraciones, y consulta
+            los pipelines y las tareas recientes.
           </p>
         </div>
 
@@ -2230,101 +2236,37 @@ function AgentPoolsPage() {
 
 /*PLACEHOLDER*/
 
-/*
- * Secciones propias de GRAVITY (sin datos en el laboratorio). Cada una muestra primero lo que Backstage le da a esa sección
- * y de qué API sale, y al final el módulo de GRAVITY como contexto. `see` son secciones de la demo donde ya se ve.
- */
+/* Secciones propias de GRAVITY: en el laboratorio no tienen datos, solo su descripción. */
 const GRAVITY_MODULES = {
-  "Soporte DevSecOps": {
-    summary: "El chatbot y la base de conocimiento de la oficina responden con la estrategia que de verdad se aplica.",
-    adds: [
-      ["Política de branching vigente", "Tipos de rama, nombres, origen, destino, estrategia de fusión y quién crea y aprueba cada flujo, tal como se validan en cada operación. La respuesta a «¿cuál es la política de branching?» sale de la configuración, no de un documento que se desactualiza.", "GET /api/branching/rules"],
-      ["¿Puedo integrar esta rama?", "Valida una integración sin crear nada y explica por qué se bloquearía.", "POST /api/branching/validate"],
-      ["Documentación de cada componente", "La documentación técnica publicada desde su repositorio, en su ficha del catálogo.", "TechDocs"]
-    ],
-    see: ["Compliance IQ", "Catálogo"],
-    gravity: "Chatbot de la oficina y base de conocimiento con soluciones validadas."
-  },
-  Insights: {
-    summary: "Las métricas de GRAVITY se pueden agrupar como se organiza el negocio y suman la información de liberación.",
-    adds: [
-      ["Clasificación del negocio", "División, Dominio / Torre, Producto / Sistema, criticidad y Legado de cada componente, para ver las métricas por torre o por producto.", "GET /api/catalog/entities"],
-      ["Pull requests trazables", "Los PR creados desde GRAVITY llevan el folio de InvGate y la etiqueta gravity: lead time por ticket, por torre o por flujo.", "Integrar cambios"],
-      ["Candidatos a liberación directa", "El historial de informes de Pre-Validación y Pre-Liberación: qué componentes cumplen el Pasaporte DevSecOps y cuáles irían al CAB.", "GET /api/rm/reports"]
-    ],
-    see: ["Release Management", "Catálogo"],
-    gravity: "Métricas de pipelines, releases y lead time de pull requests."
-  },
-  "Error Analytics": {
-    summary: "Cada falla llega con su contexto: de quién es el componente, qué tan crítico es y si usa versiones aprobadas.",
-    adds: [
-      ["Dueño y criticidad", "El pipeline que falla se liga a su componente: División, Producto, criticidad y repositorio, para priorizar y dirigir la falla al equipo correcto.", "GET /api/catalog/entities"],
-      ["Versiones fuera de la línea base", "Si el componente usa una tecnología o una versión no homologada, una causa frecuente de fallas de dependencias.", "GET /api/homologation/baseline"],
-      ["Fallas que se evitan antes", "La revisión del pipeline hacia release y master detecta etapas o reglas faltantes antes de crear el pull request.", "POST /api/branching/validate"]
-    ],
-    see: ["Homologation Status", "Catálogo"],
-    gravity: "Clasificación de fallas con IA y biblioteca de errores conocidos."
-  },
-  "Log Analyzer": {
-    summary: "Del log al componente y a la acción: quién es el dueño, qué cambió y cómo volver a una versión que funcionaba.",
-    adds: [
-      ["Ficha del componente", "Repositorio, dependencias, documentación y versiones por ambiente del servicio cuyo log se analiza.", "GET /api/catalog/entities"],
-      ["Operaciones que explican sus bloqueos", "Crear rama, integrar cambios y desplegar dejan un registro paso a paso, con el motivo de cada bloqueo en lenguaje claro.", "Scaffolder"],
-      ["Volver atrás sin recompilar", "Si el problema es la versión desplegada, Rollback despliega una ejecución anterior desde Releases.", "Releases"]
-    ],
-    see: ["Releases", "Catálogo"],
-    gravity: "Análisis de logs asistido por IA con la base de conocimiento de la oficina."
-  }
+  "Soporte DevSecOps": "Chatbot y base de conocimiento de la oficina DevSecOps. Resuelve dudas sobre pipelines, políticas y errores conocidos. Con Backstage, responde sobre la estrategia de branching con las mismas reglas que se aplican al crear ramas e integrar cambios.",
+  Insights: "Métricas de pipelines, releases y pull requests. Con el catálogo de Backstage se pueden ver por División, Dominio / Torre y Producto, y con los informes de liberación, qué componentes cumplen para liberación directa.",
+  "Error Analytics": "Clasifica las fallas de los pipelines y las compara con la biblioteca de errores conocidos. Con Backstage, cada falla se liga a su componente, su División y su criticidad, y se ve si usa versiones fuera de la línea base.",
+  "Log Analyzer": "Analiza los logs de los pipelines y sugiere la causa y la solución. Con Backstage, el log lleva a la ficha del componente y, si el problema es la versión desplegada, al rollback desde Releases."
 };
 
-function PlaceholderPage({ title, sections = [] }) {
-  const { navigate } = useNav();
-  const module = GRAVITY_MODULES[title];
-  if (!module) {
-    return (
-      <section className="module-page">
-        <div className="module-heading">
-          <div>
-            <span className="module-eyebrow">GRAVITY</span>
-            <h1>{title}</h1>
-            <p>Esta sección estará disponible próximamente.</p>
-          </div>
-        </div>
-      </section>
-    );
-  }
-  const links = module.see.filter((name) => sections.includes(name));
+function PlaceholderPage({ title }) {
   return (
     <section className="module-page">
       <div className="module-heading">
         <div>
-          <span className="module-eyebrow">GRAVITY · con Backstage</span>
+          <span className="module-eyebrow">GRAVITY</span>
           <h1>{title}</h1>
-          <p>{module.summary}</p>
+          <p>{GRAVITY_MODULES[title] ?? "Esta sección estará disponible próximamente."}</p>
         </div>
-      </div>
-      <div className="module-panel gravity-module">
-        <strong className="gravity-module-title">Lo que Backstage le da a esta sección</strong>
-        <div className="gravity-module-grid">
-          {module.adds.map(([name, text, source]) => (
-            <div key={name} className="gravity-module-card">
-              <strong>{name}</strong>
-              <p>{text}</p>
-              <code>{source}</code>
-            </div>
-          ))}
-        </div>
-        {links.length > 0 && (
-          <div className="gravity-module-links">
-            <span>Dónde verlo en esta demo:</span>
-            {links.map((name) => (
-              <button key={name} className="link-button" onClick={() => navigate(name)}>{name}</button>
-            ))}
-          </div>
-        )}
-        <small className="gravity-module-note">Módulo de GRAVITY: {module.gravity}</small>
       </div>
     </section>
+  );
+}
+
+function SectionTabs({ tabs, selected, sections, onSelect }) {
+  const visible = tabs.filter(([page]) => sections.includes(page));
+  if (visible.length < 2) return null;
+  return (
+    <div className="homologation-tabs section-tabs">
+      {visible.map(([page, label]) => (
+        <button key={page} className={selected === page ? "selected" : ""} onClick={() => onSelect(page)}>{label}</button>
+      ))}
+    </div>
   );
 }
 
@@ -2488,11 +2430,11 @@ function App() {
           )}
 
           {showPages && selectedPage === "Releases" && (
-            <ReleasesPage />
+            <ReleasesPage tabs={<SectionTabs tabs={RELEASE_TABS} selected={selectedPage} sections={access.sections} onSelect={navigate} />} />
           )}
 
           {showPages && selectedPage === "Release Management" && (
-            <ReleaseManagementPage initialReport={linkedReport} />
+            <ReleaseManagementPage initialReport={linkedReport} tabs={<SectionTabs tabs={RELEASE_TABS} selected={selectedPage} sections={access.sections} onSelect={navigate} />} />
           )}
 
           {showPages && selectedPage === "TechDebt" && (
@@ -2549,7 +2491,6 @@ function App() {
               title={
                 selectedPage
               }
-              sections={access.sections}
             />
           )}
         </div>

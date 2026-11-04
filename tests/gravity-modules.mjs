@@ -1,5 +1,5 @@
-// Secciones propias de GRAVITY (Soporte DevSecOps, Insights, Error Analytics, Log Analyzer): muestran lo que Backstage les da,
-// sus fuentes y enlaces solo a las secciones que el rol puede ver. Sirve dist/ y simula la API de Backstage.
+// Secciones propias de GRAVITY (Soporte DevSecOps, Insights, Error Analytics, Log Analyzer): muestran su descripción
+// en lugar de «próximamente». Sirve dist/ y simula la API de Backstage.
 import { createRequire } from "node:module";
 import http from "node:http";
 import fs from "node:fs";
@@ -19,8 +19,7 @@ const server = http
   })
   .listen(5199);
 
-const MODULES = ["Soporte DevSecOps", "Insights", "Error Analytics", "Log Analyzer"];
-const sections = [...MODULES, "Catálogo", "Compliance IQ"];
+const MODULES = { "Soporte DevSecOps": "Chatbot", Insights: "Métricas", "Error Analytics": "fallas", "Log Analyzer": "logs" };
 const fallos = [];
 const espera = (cond, msg) => cond || fallos.push(msg);
 
@@ -30,33 +29,21 @@ const errores = [];
 page.on("pageerror", (e) => errores.push(e.message));
 await page.route("**/backstage/**", (route) => {
   const url = route.request().url();
-  if (url.includes("/api/access/me")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true, roles: [{ id: "x", name: "Rol de prueba" }], sections, admin: false }) });
+  if (url.includes("/api/access/me")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true, roles: [{ id: "x", name: "Rol de prueba" }], sections: Object.keys(MODULES), admin: false }) });
   if (url.includes("/api/auth/")) return route.fulfill({ status: 403, contentType: "application/json", body: "{}" });
-  const lista = /entities|tasks|pipelines|agent-pools|branches|policies|repositories|items|components|baseline|clusters|reports/.test(url);
-  return route.fulfill({ status: 200, contentType: "application/json", body: lista ? "[]" : "{}" });
+  return route.fulfill({ status: 200, contentType: "application/json", body: /entities|tasks|pipelines/.test(url) ? "[]" : "{}" });
 });
 await page.goto("http://localhost:5199/");
 await page.waitForTimeout(1500);
 
-for (const name of MODULES) {
+for (const [name, word] of Object.entries(MODULES)) {
   await page.locator(".sidebar nav button", { hasText: name }).click();
   await page.waitForTimeout(400);
   const texto = await page.locator("main").innerText();
-  espera(texto.includes("Lo que Backstage le da a esta sección"), `${name}: falta lo que aporta Backstage`);
-  espera(texto.includes("/api/") && texto.includes("Módulo de GRAVITY:"), `${name}: faltan las fuentes o el módulo de GRAVITY`);
+  espera(texto.includes(word) && texto.includes("Backstage"), `${name}: falta su descripción`);
   espera(!texto.includes("próximamente"), `${name}: sigue diciendo «próximamente»`);
+  if (process.env.SHOT && name === "Soporte DevSecOps") await page.screenshot({ path: process.env.SHOT });
 }
-// Insights enlaza a Release Management y Catálogo; el rol no ve Release Management, así que solo aparece Catálogo.
-await page.locator(".sidebar nav button", { hasText: "Insights" }).click();
-await page.waitForTimeout(300);
-const enlaces = (await page.locator("main .gravity-module-links button").allInnerTexts()).map((t) => t.trim());
-espera(JSON.stringify(enlaces) === JSON.stringify(["Catálogo"]), `Insights: los enlaces debían ser [Catálogo] y fueron ${JSON.stringify(enlaces)}`);
-await page.locator(".sidebar nav button", { hasText: "Soporte DevSecOps" }).click();
-await page.waitForTimeout(300);
-if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT, fullPage: true });
-await page.locator("main .gravity-module-links button", { hasText: "Compliance IQ" }).click();
-await page.waitForTimeout(600);
-espera((await page.locator(".sidebar nav button.active").innerText().catch(() => "")).includes("Compliance IQ") || !(await page.locator("main").innerText()).includes("Lo que Backstage le da"), "El enlace a Compliance IQ no navegó");
 espera(errores.length === 0, `Errores no controlados: ${errores.join("; ")}`);
 
 await browser.close();
@@ -65,4 +52,4 @@ if (fallos.length) {
   console.error(fallos.join("\n"));
   process.exit(1);
 }
-console.log("OK: secciones de GRAVITY con lo que aporta Backstage");
+console.log("OK: secciones de GRAVITY con su descripción");

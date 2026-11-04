@@ -81,6 +81,13 @@ function StatusBadge({ status }) {
   return <span className={className}>{text}</span>;
 }
 
+/* Nombre visible de las secciones del backend que se muestran con otro nombre (tabla de Usuarios). */
+const SECTION_LABEL = {
+  "Pipeline Engine (IDP)": "Autoservicio",
+  Releases: "Releases · Ambientes",
+  "Release Management": "Releases · Informes de liberación"
+};
+
 function Heading({ eyebrow, title, description, actions }) {
   return (
     <div className="module-heading">
@@ -811,7 +818,7 @@ export function PipelinesPage() {
 
 /* ---------------------------------------------------------------- Releases */
 
-export function ReleasesPage() {
+export function ReleasesPage({ tabs }) {
   const loader = useData(async () => {
     const [parity, components] = await Promise.all([homologation.components(), catalog.components().catch(() => [])]);
     // El plugin de homologación devuelve el identificador del componente; se muestra su nombre visible si lo tiene.
@@ -829,6 +836,7 @@ export function ReleasesPage() {
         description="Qué versión está desplegada en cada ambiente, con su commit y ejecución. Desde aquí se despliega y se hace rollback."
         actions={<TemplateButton template="solicitar-despliegue" label="Desplegar" className="create-button" onFinished={loader.reload} />}
       />
+      {tabs}
       <Stats
         items={[
           ["Componentes", items.length],
@@ -1119,7 +1127,7 @@ export function ComplianceIqPage() {
   return (
     <section className="module-page">
       <Heading
-        eyebrow="CUMPLIMIENTO"
+        eyebrow="ESTRATEGIA DE BRANCHING"
         title="Compliance IQ"
         description="Estrategia de branching, roles y políticas: qué exige la organización y si Azure DevOps lo está imponiendo."
       />
@@ -1592,7 +1600,7 @@ export function UsersPage() {
               {roles.length === 0 && <EmptyRow colSpan={1} loading={loader.loading}>Sin roles configurados.</EmptyRow>}
               {sections.map((section) => (
                 <tr key={section}>
-                  <td>{section}</td>
+                  <td>{SECTION_LABEL[section] ?? section}</td>
                   {roles.map((role) => <td key={role.id}>{role.sections.includes(section) ? "✔" : "—"}</td>)}
                 </tr>
               ))}
@@ -1774,7 +1782,7 @@ function RmReportView({ id, onBack }) {
 const RM_PAGE = 50;
 
 /** Historial de informes de Release Management (MongoDB), con filtros y el detalle de cada informe. */
-export function ReleaseManagementPage({ initialReport }) {
+export function ReleaseManagementPage({ initialReport, tabs }) {
   const [openId, setOpenId] = React.useState(initialReport ?? null);
   const [filters, setFilters] = React.useState({ kind: "", component: "", passed: "", q: "", from: "", to: "" });
   const [limit, setLimit] = React.useState(RM_PAGE);
@@ -1806,10 +1814,11 @@ export function ReleaseManagementPage({ initialReport }) {
   return (
     <section className="module-page">
       <Heading
-        eyebrow="GOBIERNO DE LIBERACIONES"
-        title="Release Management"
-        description="Historial de los informes de Pre-Validación (team/sprint → develop) y Pre-Liberación (release → master) de cada pull request creado desde GRAVITY. Cada informe también se envía al espacio de Google Chat."
+        eyebrow="ENTREGA"
+        title="Releases"
+        description="Informes de Pre-Validación (team/sprint → develop) y Pre-Liberación (release → master) de cada pull request creado desde GRAVITY. Cada informe también se envía al espacio de Google Chat."
       />
+      {tabs}
       <Stats
         items={[
           ["Informes", total],

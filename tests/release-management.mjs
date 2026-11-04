@@ -69,7 +69,7 @@ const rows = () => page.locator('[data-testid="rm-table"] tbody tr');
 
 // 1) Historial.
 await page.goto("http://localhost:5196/");
-await page.locator(".sidebar nav button", { hasText: "Release Management" }).first().click();
+await page.locator(".sidebar nav button", { hasText: "Releases" }).first().click();
 await page.waitForFunction(() => document.querySelectorAll('[data-testid="rm-table"] tbody tr').length >= 2, null, { timeout: 15000 }).catch(() => fail("no aparece el historial"));
 const first = await rows().first().innerText();
 for (const t of ["Pre-Liberación", "svc", "release/1.4.0 → master", "Ana López", "Requiere CAB", "92.9%", "No enviado"]) if (!first.includes(t)) fail(`fila de Pre-Liberación sin «${t}»: ${first}`);

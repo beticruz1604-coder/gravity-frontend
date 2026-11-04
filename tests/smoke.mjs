@@ -53,7 +53,16 @@ for (const nombre of pantallas) {
     const texto = await page.locator("main").innerText();
     if (!texto.includes("lideres-tecnicos, sre")) errors.push("Compliance IQ: no muestra los varios grupos de un rol");
   }
+  // Releases agrupa Ambientes e Informes de liberación en pestañas.
+  if (nombre.trim() === "Releases") {
+    await page.locator("main .section-tabs button", { hasText: "Informes de liberación" }).click();
+    await page.waitForTimeout(500);
+    if (!(await page.locator(".sidebar nav button.active").innerText()).includes("Releases")) errors.push("Releases: la pestaña de informes no deja activo Releases en el menú");
+    if (!(await page.locator("main").innerText()).includes("Pre-Validación")) errors.push("Releases: la pestaña de informes no abre los informes");
+  }
 }
+const esperado = ["Resumen", "Catálogo", "Autoservicio", "Releases", "Homologation Status", "Compliance IQ"];
+if (JSON.stringify(pantallas.slice(0, 6).map((t) => t.trim())) !== JSON.stringify(esperado)) errors.push(`orden del menú inesperado: ${pantallas.join(", ")}`);
 console.log(`pantallas recorridas: ${pantallas.length}`);
 
 await browser.close();
