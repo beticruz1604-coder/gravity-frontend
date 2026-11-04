@@ -3317,3 +3317,62 @@ td.wrap {
   padding: 0;
   margin-bottom: 18px;
 }
+
+/* Bitácora: dos tablas lado a lado, barras por día y tipo de interacción. */
+.audit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 18px;
+}
+
+.audit-days {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+}
+
+.audit-day {
+  display: grid;
+  grid-template-columns: 100px 1fr 48px 120px;
+  align-items: center;
+  gap: 12px;
+  color: #9fb0c3;
+  font-size: 12px;
+}
+
+.audit-day strong {
+  color: #edf3ff;
+  text-align: right;
+}
+
+.audit-bar {
+  height: 8px;
+  background: #13213a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.audit-bar div {
+  height: 100%;
+  background: #6592ff;
+}
+
+.audit-kind {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  white-space: nowrap;
+  background: #13213a;
+  color: #a9c5ff;
+}
+
+.audit-kind-operacion {
+  background: #10302a;
+  color: #6fdcb1;
+}
+
+.audit-kind-negado {
+  background: #3a1820;
+  color: #ff9aa8;
+}

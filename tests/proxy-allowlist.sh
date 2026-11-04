@@ -51,6 +51,11 @@ espera 200 POST /backstage/api/access/users/fidencio.santander/reset-password
 espera 200 POST /backstage/api/access/me/password
 espera 200 POST /backstage/api/access/products
 espera 403 DELETE /backstage/api/access/products
+espera 200 GET /backstage/api/access/audit/events
+espera 200 GET /backstage/api/access/audit/operations
+espera 200 POST /backstage/api/access/activity
+espera 403 GET /backstage/api/access/audit/otra
+espera 403 GET /backstage/api/access/activity
 espera 200 DELETE /backstage/api/access/users/fidencio.santander
 espera 403 DELETE /backstage/api/access/users
 espera 403 PATCH /backstage/api/access/users/fidencio.santander/../../catalog/entities

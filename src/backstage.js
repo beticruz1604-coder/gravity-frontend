@@ -304,8 +304,19 @@ export const access = {
   changePassword: (body) => request("/api/access/me/password", { method: "POST", body }),
   /** Productos de la organización (campo «Producto» de los Golden Paths). */
   products: () => request("/api/access/products"),
-  addProduct: (name) => request("/api/access/products", { method: "POST", body: { name } })
+  addProduct: (name) => request("/api/access/products", { method: "POST", body: { name } }),
+  /** Bitácora: avisa qué sección abrió la persona. Si falla no pasa nada: la pantalla no depende de esto. */
+  activity: (section) => request("/api/access/activity", { method: "POST", body: { section }, timeout: 10000 }).catch(() => undefined),
+  /** Filtros: from, to (AAAA-MM-DD), kind (vista | consulta | accion | negado), user, q, limit, offset. */
+  auditEvents: (filters = {}) => request(`/api/access/audit/events${queryOf(filters)}`),
+  /** Filtros: from, to, user, template. */
+  auditOperations: (filters = {}) => request(`/api/access/audit/operations${queryOf(filters)}`, { timeout: 60000 })
 };
+
+function queryOf(filters) {
+  const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== null && v !== ""));
+  return query.toString() ? `?${query}` : "";
+}
 
 /* Catálogo */
 
