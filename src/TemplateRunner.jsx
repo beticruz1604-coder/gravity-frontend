@@ -576,8 +576,8 @@ const suggestCode = (name) => {
 };
 
 /**
- * Línea de negocio («Crear repositorio»): se ve la clave que va en el nombre del repositorio con su nombre completo
- * («cds — Cadena de Suministro»). Si no está, «Agregar línea de negocio» la da de alta para todos con su clave.
+ * Línea de negocio («Crear repositorio»): se ve la clave que va en el nombre del repositorio (cds, digital). Si no está,
+ * «Agregar línea de negocio» la da de alta para todos con su nombre y su clave.
  */
 function BusinessLineField({ definition, required, value, onChange, error }) {
   const state = useAsync(() => access.businessLines(), []);
@@ -630,7 +630,7 @@ function BusinessLineField({ definition, required, value, onChange, error }) {
       >
         <option value="">Selecciona una línea de negocio</option>
         {lines.map((l) => (
-          <option key={l.code} value={l.code}>{l.code === l.name.toLowerCase() ? l.code : `${l.code} — ${l.name}`}</option>
+          <option key={l.code} value={l.code} title={l.name}>{l.code}</option>
         ))}
         <option value={ADD_PRODUCT}>＋ Agregar línea de negocio…</option>
       </select>
