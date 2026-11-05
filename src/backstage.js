@@ -362,6 +362,10 @@ export const branching = {
     request(`/api/branching/branches/${enc(project)}/${enc(repo)}`),
   repositoryExists: (name, project = PROJECT) =>
     request(`/api/branching/repositories/${enc(project)}/${enc(name)}`),
+  /** Reglas de la sección «Creación de Repositorios»: qué aplica GRAVITY y qué queda pendiente. */
+  repositoryRules: () => request("/api/branching/repository-rules"),
+  /** ¿Se puede crear el repositorio? Nombre según las reglas, que no exista y que el proyecto sea privado. */
+  repositoryCheck: (body) => request("/api/branching/repository-check", { method: "POST", body }),
   pipelines: (project = PROJECT) => request(`/api/branching/pipelines/${enc(project)}`, { timeout: 60000 }),
   agentPools: (project = PROJECT) => request(`/api/branching/agent-pools/${enc(project)}`, { timeout: 60000 }),
   policies: (repo, project = PROJECT) =>

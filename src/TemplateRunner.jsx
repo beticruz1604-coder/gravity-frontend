@@ -12,7 +12,8 @@ import {
   GitPullRequest,
   Workflow,
   RotateCcw,
-  Plus
+  Plus,
+  FolderPlus
 } from "lucide-react";
 
 import {
@@ -36,6 +37,8 @@ import { TASK_STATUS_TEXT, TaskStatus } from "./status";
  */
 
 const GOLDEN_TAG = "golden-path";
+/** Plantillas de la sección «Creación de Repositorios»: no aparecen en la galería de Autoservicio. */
+export const REPOSITORY_TAG = "creacion-repositorios";
 
 /* ---------------------------------------------------------------- Esquema */
 
@@ -435,6 +438,85 @@ function RepositoryNameField({ definition, required, value, onChange, error, opt
   );
 }
 
+/**
+ * «Crear repositorio»: arma el nombre con la línea de negocio, la aplicación y el tipo, y pregunta a GRAVITY si cumple las reglas,
+ * si ya existe y si el proyecto es privado. Mientras no se pueda crear, el campo queda vacío y el paso no avanza.
+ */
+function RepositoryNameCheckField({ definition, onChange, options = {}, form, error: blocked }) {
+  const project = options.project ?? PROJECT;
+  const line = (form[options.lineField] ?? "").trim();
+  const app = (form[options.appField] ?? "").trim();
+  const type = form[options.typeField] ?? "";
+  const [state, setState] = React.useState({});
+
+  React.useEffect(() => {
+    setState({});
+    if (!line || !app || !type) {
+      onChange(undefined);
+      return undefined;
+    }
+    let cancelled = false;
+    setState({ loading: true });
+    const timer = setTimeout(() => {
+      branching
+        .repositoryCheck({ project, line, app, type })
+        .then((result) => {
+          if (!cancelled) {
+            setState({ result });
+            onChange(result.valid ? result.name : undefined);
+          }
+        })
+        .catch((err) => {
+          // Sin conexión no se bloquea: la tarea vuelve a comprobar todo antes de crear el repositorio.
+          if (!cancelled) {
+            setState({ error: err.message });
+            onChange([line, app, type].join("-"));
+          }
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [line, app, type, project]);
+
+  const { result, error, loading } = state;
+  let body;
+  if (!line || !app || !type) {
+    body = <p>Completa la línea de negocio, la aplicación y el tipo para comprobar el nombre.</p>;
+  } else if (loading) {
+    body = <p>Comprobando el nombre del repositorio…</p>;
+  } else if (error) {
+    body = <p>No se pudo comprobar el nombre ({error}). Se comprobará al crear el repositorio.</p>;
+  } else if (result) {
+    body = (
+      <>
+        <p>
+          {result.valid ? "Se creará el repositorio " : "No se puede crear el repositorio "}
+          <code>{result.name}</code>
+          {result.valid ? ` en ${project}.` : "."}
+        </p>
+        {result.valid && <p>Cumple las reglas, el nombre está libre y el proyecto es privado.</p>}
+        {result.errors.map((message) => (
+          <p key={message} className="field-error">{message}</p>
+        ))}
+        {(result.warnings ?? []).map((message) => (
+          <p key={message} className="field-warning">{message}</p>
+        ))}
+      </>
+    );
+  }
+
+  return (
+    <div className={`preview-box ${result && !result.valid ? "preview-invalid" : ""}`}>
+      <strong>{definition.title}</strong>
+      {body}
+      {blocked && !result && <p className="field-error" role="alert">{blocked}</p>}
+    </div>
+  );
+}
+
 function BranchField({ definition, required, value, onChange, error, options = {}, form }) {
   const project = options.project ?? PROJECT;
   const repo = form[options.repoField];
@@ -753,6 +835,8 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
       return <PreviewField definition={definition} onChange={common.onChange} options={options} form={form} error={error} />;
     case "BranchNamePreview":
       return <BranchNameField definition={definition} onChange={common.onChange} options={options} form={form} error={error} />;
+    case "RepositoryNameCheck":
+      return <RepositoryNameCheckField definition={definition} onChange={common.onChange} options={options} form={form} error={error} />;
     default:
       break;
   }
@@ -1141,6 +1225,9 @@ function templateIcon(entity) {
   }
   if (entity.metadata.name === "redesplegar-version") {
     return RotateCcw;
+  }
+  if (entity.metadata.tags?.includes(REPOSITORY_TAG)) {
+    return FolderPlus;
   }
   return Rocket;
 }
