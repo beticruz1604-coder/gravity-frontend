@@ -28,7 +28,7 @@ import {
 } from "./backstage";
 import { TemplateButton } from "./TemplateRunner";
 import { useNav } from "./nav";
-import { PipelineStatus, Percent } from "./status";
+import { PipelineStatus, Percent, StatusPill, TaskStatus } from "./status";
 import { ownerLabel } from "./catalog";
 import { csvBlob, download, xlsxBlob } from "./export";
 
@@ -742,6 +742,117 @@ export function RepositoriesPage() {
           </table>
         </div>
         <Footer loader={loader} source="Catálogo + Azure DevOps" />
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------- Creación de Repositorios */
+
+const REPOSITORY_TEMPLATE = "crear-repositorio";
+
+export function RepositoryCreationPage() {
+  const loader = useData(async () => {
+    const [rules, tasks] = await Promise.all([
+      branching.repositoryRules(),
+      scaffolder.tasks(50).catch(() => ({ tasks: [] }))
+    ]);
+    const created = (tasks.tasks ?? []).filter((t) => (t.spec?.templateInfo?.entityRef ?? "").endsWith(`/${REPOSITORY_TEMPLATE}`));
+    return { rules: rules.rules ?? [], config: rules.config ?? {}, created };
+  }, { interval: 60000 });
+  const { rules = [], config = {}, created = [] } = loader.data ?? {};
+  const applied = rules.filter((r) => r.status === "aplica");
+  const pending = rules.filter((r) => r.status !== "aplica");
+  const nameOf = (t) => {
+    const p = t.spec?.parameters ?? {};
+    return [p.line, p.app, p.type].filter(Boolean).join("-") || "—";
+  };
+
+  return (
+    <section className="module-page">
+      <Heading
+        eyebrow="CÓDIGO"
+        title="Creación de Repositorios"
+        description="Crea repositorios en Azure DevOps con las reglas del Modelo de Gobierno de Repositorios. GRAVITY revisa el nombre y el proyecto antes de crear nada, y deja el repositorio con sus ramas, políticas y archivos de gobierno."
+        actions={<TemplateButton template={REPOSITORY_TEMPLATE} label="Nuevo repositorio" className="create-button" onFinished={loader.reload} />}
+      />
+
+      <Stats
+        items={[
+          ["Reglas que aplica GRAVITY", applied.length],
+          ["Pendientes", pending.length],
+          ["Tipos reconocidos", (config.suffixes ?? []).length],
+          ["Creados desde aquí", created.filter((t) => t.status === "completed").length]
+        ]}
+      />
+
+      <div className="module-panel">
+        <div className="pipeline-toolbar">
+          <div className="panel-title">
+            <strong>Reglas</strong>
+            <small>Formato del nombre: línea de negocio-aplicación-tipo, por ejemplo cds-inventarios-api.</small>
+          </div>
+          <Refresh loader={loader} />
+        </div>
+        <ErrorBox message={loader.error && `No fue posible consultar las reglas. ${loader.error}`} />
+        <div className="table-wrapper">
+          <table className="pool-table">
+            <thead>
+              <tr>
+                <th>Regla</th>
+                <th>Qué pide</th>
+                <th>Fuente</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.length === 0 && <EmptyRow colSpan={4} loading={loader.loading && !loader.data}>No hay reglas configuradas.</EmptyRow>}
+              {[...applied, ...pending].map((rule) => (
+                <tr key={rule.id}>
+                  <td><strong>{rule.title}</strong></td>
+                  <td>{rule.detail}</td>
+                  <td>{rule.source}</td>
+                  <td>
+                    {rule.status === "aplica"
+                      ? <StatusPill tone="success">Aplica</StatusPill>
+                      : <StatusPill tone="warning">Pendiente</StatusPill>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="module-panel panel-spaced">
+        <div className="panel-title">
+          <strong>Repositorios creados</strong>
+          <small>Últimas solicitudes hechas desde esta sección.</small>
+        </div>
+        <div className="table-wrapper">
+          <table className="pool-table">
+            <thead>
+              <tr>
+                <th>Repositorio</th>
+                <th>Solicitó</th>
+                <th>Fecha</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {created.length === 0 && <EmptyRow colSpan={4} loading={loader.loading && !loader.data}>Todavía no se ha creado ningún repositorio desde aquí.</EmptyRow>}
+              {created.map((t) => (
+                <tr key={t.id}>
+                  <td>{nameOf(t)}</td>
+                  <td>{(t.spec?.user?.ref ?? t.createdBy ?? "—").replace(/^user:default\//, "")}</td>
+                  <td>{formatDate(t.createdAt)}</td>
+                  <td><TaskStatus status={t.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Footer loader={loader} source="Reglas de GRAVITY + Azure DevOps" />
       </div>
     </section>
   );

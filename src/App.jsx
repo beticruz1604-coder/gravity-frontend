@@ -16,6 +16,7 @@ import {
   GitPullRequest,
   Server,
   Users,
+  FolderPlus,
   KeyRound,
   LogOut,
   Gauge,
@@ -46,6 +47,7 @@ import {
 } from "./backstage";
 import {
   TemplateModal,
+  REPOSITORY_TAG,
   TaskViewer
 } from "./TemplateRunner";
 import {
@@ -65,6 +67,7 @@ import {
   HomologationPage,
   UsersPage,
   RepositoriesPage,
+  RepositoryCreationPage,
   PipelinesPage,
   ReleasesPage,
   ReleaseManagementPage,
@@ -89,6 +92,7 @@ const menuItems = [
   { name: "Homologation Status", icon: CheckCircle },
   { name: "Compliance IQ", icon: ShieldCheck },
   { name: "Repositories", icon: GitBranch },
+  { name: "Creación de Repositorios", icon: FolderPlus },
   { name: "Pipelines", icon: Workflow },
   { name: "Pool de Agentes", icon: Activity },
   { name: "TechDebt", icon: Bug },
@@ -1955,6 +1959,8 @@ function PipelineEnginePage() {
 
       {showCreate && (
         <TemplateModal
+          // Las plantillas de «Creación de Repositorios» se usan desde su sección.
+          filter={(t) => !t.metadata.tags?.includes(REPOSITORY_TAG)}
           onClose={() =>
             setShowCreate(false)
           }
@@ -2447,6 +2453,10 @@ function App() {
 
           {showPages && selectedPage === "Repositories" && (
             <RepositoriesPage />
+          )}
+
+          {showPages && selectedPage === "Creación de Repositorios" && (
+            <RepositoryCreationPage />
           )}
 
           {showPages && selectedPage === "Pipelines" && (
