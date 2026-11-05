@@ -310,6 +310,9 @@ export const access = {
   /** Productos de la organización (campo «Producto» de los Golden Paths). */
   products: () => request("/api/access/products"),
   addProduct: (name) => request("/api/access/products", { method: "POST", body: { name } }),
+  /** Líneas de negocio del nombre de los repositorios: { code, name }; se agregan desde «Crear repositorio». */
+  businessLines: () => request("/api/access/business-lines"),
+  addBusinessLine: (body) => request("/api/access/business-lines", { method: "POST", body }),
   /** Bitácora: avisa qué sección abrió la persona. Si falla no pasa nada: la pantalla no depende de esto. */
   activity: (section) => request("/api/access/activity", { method: "POST", body: { section }, timeout: 10000 }).catch(() => undefined),
   /** Filtros: from, to (AAAA-MM-DD), kind (vista | consulta | accion | negado), user, q, limit, offset. */
