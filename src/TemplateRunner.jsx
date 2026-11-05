@@ -37,7 +37,7 @@ import { TASK_STATUS_TEXT, TaskStatus } from "./status";
  */
 
 const GOLDEN_TAG = "golden-path";
-/** Plantillas de la sección «Creación de Repositorios»: no aparecen en la galería de Autoservicio. */
+/** «Crear repositorio» (Autoservicio › Operaciones): la galería solo la ofrece a SCM y Admin. */
 export const REPOSITORY_TAG = "creacion-repositorios";
 
 /* ---------------------------------------------------------------- Esquema */
@@ -448,6 +448,7 @@ function RepositoryNameCheckField({ definition, onChange, options = {}, form, er
   const app = (form[options.appField] ?? "").trim();
   const type = form[options.typeField] ?? "";
   const [state, setState] = React.useState({});
+  const rules = useAsync(() => branching.repositoryRules(), []);
 
   React.useEffect(() => {
     setState({});
@@ -513,6 +514,17 @@ function RepositoryNameCheckField({ definition, onChange, options = {}, form, er
       <strong>{definition.title}</strong>
       {body}
       {blocked && !result && <p className="field-error" role="alert">{blocked}</p>}
+      {rules.data?.rules?.length > 0 && (
+        <details className="repository-rules">
+          <summary>Reglas que se aplican ({rules.data.rules.filter((r) => r.status === "aplica").length})</summary>
+          <ul>
+            {rules.data.rules.filter((r) => r.status === "aplica").map((r) => (
+              <li key={r.id}><strong>{r.title}.</strong> {r.detail} <small>{r.source}</small></li>
+            ))}
+          </ul>
+          <p><strong>Pendientes:</strong> {rules.data.rules.filter((r) => r.status !== "aplica").map((r) => r.title).join("; ")}.</p>
+        </details>
+      )}
     </div>
   );
 }
@@ -1269,7 +1281,7 @@ function Gallery({ onPick, filter }) {
       {state.loading && <div className="runner-loading"><Loader2 size={18} className="spin" /> Consultando plantillas…</div>}
       {state.error && <div className="module-error"><AlertTriangle size={16} /> {state.error}</div>}
       {group("Nuevo servicio (Golden Path)", "Repositorio, pipeline, despliegue y registro en el catálogo, listos para usar.", golden)}
-      {group("Operaciones", "Tareas del flujo de trabajo: integrar, crear ramas y desplegar.", operations)}
+      {group("Operaciones", "Tareas del flujo de trabajo: integrar cambios, crear ramas y crear repositorios.", operations)}
     </div>
   );
 }
