@@ -774,7 +774,7 @@ export function RepositoryCreationPage() {
         eyebrow="CÓDIGO"
         title="Creación de Repositorios"
         description="Crea repositorios en Azure DevOps con las reglas del Modelo de Gobierno de Repositorios. GRAVITY revisa el nombre y el proyecto antes de crear nada, y deja el repositorio con sus ramas, políticas y archivos de gobierno."
-        actions={<TemplateButton template={REPOSITORY_TEMPLATE} label="Nuevo repositorio" className="create-button" onFinished={loader.reload} />}
+        actions={<TemplateButton template={REPOSITORY_TEMPLATE} title="Crear repositorio" label="Nuevo repositorio" className="create-button" onFinished={loader.reload} />}
       />
 
       <Stats

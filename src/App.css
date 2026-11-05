@@ -950,6 +950,7 @@ textarea {
 .create-button {
   height: 38px;
   padding: 0 15px;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   justify-content: center;

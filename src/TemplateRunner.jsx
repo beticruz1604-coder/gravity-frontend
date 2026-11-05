@@ -1334,7 +1334,7 @@ export function TemplateModal({ onClose, template, preset, filter, title = "Crea
 }
 
 /** Botón que abre el modal ya posicionado en una plantilla. */
-export function TemplateButton({ template, preset, label, className = "pipeline-action", onFinished, disabled }) {
+export function TemplateButton({ template, preset, label, className = "pipeline-action", onFinished, disabled, title }) {
   const [open, setOpen] = React.useState(false);
   return (
     <>
@@ -1343,6 +1343,7 @@ export function TemplateButton({ template, preset, label, className = "pipeline-
         <TemplateModal
           template={template}
           preset={preset}
+          title={title}
           onClose={() => setOpen(false)}
           onFinished={onFinished}
         />
