@@ -576,8 +576,8 @@ const suggestCode = (name) => {
 };
 
 /**
- * Línea de negocio («Crear repositorio»): se ve el nombre completo («Cadena de Suministro») y se guarda la clave que va en el
- * nombre del repositorio («cds»). Si no está, «Agregar línea de negocio» la da de alta para todos con su clave.
+ * Línea de negocio («Crear repositorio»): se ve la clave que va en el nombre del repositorio con su nombre completo
+ * («cds — Cadena de Suministro»). Si no está, «Agregar línea de negocio» la da de alta para todos con su clave.
  */
 function BusinessLineField({ definition, required, value, onChange, error }) {
   const state = useAsync(() => access.businessLines(), []);
@@ -589,7 +589,7 @@ function BusinessLineField({ definition, required, value, onChange, error }) {
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState("");
   const lines = [...(state.data?.lines ?? []), ...added.filter((a) => !(state.data?.lines ?? []).some((l) => l.code === a.code))]
-    .sort((x, y) => x.name.localeCompare(y.name, "es"));
+    .sort((x, y) => x.code.localeCompare(y.code, "es"));
 
   const save = async () => {
     setSaving(true);
@@ -614,7 +614,7 @@ function BusinessLineField({ definition, required, value, onChange, error }) {
       definition={definition}
       required={required}
       error={error || saveError || (state.error && `No se pudo leer la lista de líneas de negocio: ${state.error}`)}
-      help={state.loading ? "Cargando líneas de negocio…" : value ? `En el nombre del repositorio va como «${value}».` : undefined}
+      help={state.loading ? "Cargando líneas de negocio…" : undefined}
     >
       <select
         value={adding ? ADD_PRODUCT : value ?? ""}
@@ -630,7 +630,7 @@ function BusinessLineField({ definition, required, value, onChange, error }) {
       >
         <option value="">Selecciona una línea de negocio</option>
         {lines.map((l) => (
-          <option key={l.code} value={l.code}>{l.name}</option>
+          <option key={l.code} value={l.code}>{l.code === l.name.toLowerCase() ? l.code : `${l.code} — ${l.name}`}</option>
         ))}
         <option value={ADD_PRODUCT}>＋ Agregar línea de negocio…</option>
       </select>
