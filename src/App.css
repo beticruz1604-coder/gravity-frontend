@@ -3416,23 +3416,37 @@ td.wrap {
   align-items: flex-end;
 }
 .workspace-select {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
   border: 1px solid rgba(120, 150, 200, 0.25);
   border-radius: 8px;
   background: rgba(15, 25, 45, 0.6);
   color: #dfe7f5;
 }
+/* La lista ocupa todo el recuadro: se abre con un clic en cualquier parte, también sobre la flecha. Los íconos no capturan el clic. */
 .workspace-select select {
   background: transparent;
   border: none;
   color: inherit;
   font: inherit;
-  max-width: 220px;
+  max-width: 240px;
   appearance: none;
   cursor: pointer;
+  padding: 6px 32px 6px 12px;
+}
+.workspace-select svg {
+  position: absolute;
+  pointer-events: none;
+}
+.workspace-select svg:first-child:not(:last-child) {
+  left: 10px;
+}
+.workspace-select svg:last-child {
+  right: 10px;
+}
+.workspace-select svg:first-child:not(:last-child) ~ select {
+  padding-left: 30px;
 }
 .workspace-select select option,
 .workspace-select select optgroup {
