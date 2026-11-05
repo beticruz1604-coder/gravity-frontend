@@ -637,7 +637,8 @@ function RepositoryTypeField({ definition, required, value, onChange, error }) {
   const [name, setName] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState("");
-  const types = [...(state.data?.types ?? []), ...added.filter((a) => !(state.data?.types ?? []).some((t) => t.code === a.code))];
+  const types = [...(state.data?.types ?? []), ...added.filter((a) => !(state.data?.types ?? []).some((t) => t.code === a.code))]
+    .sort((x, y) => x.code.localeCompare(y.code));
   const save = async () => {
     setSaving(true);
     setSaveError("");
