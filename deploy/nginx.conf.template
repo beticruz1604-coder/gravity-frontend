@@ -45,7 +45,7 @@ map "$request_method $uri $args" $ruta_permitida {
 
   ~^POST\ /backstage/api/scaffolder/v2/(tasks|tasks/[^/]+/cancel)\ .*$ 1;
   # Administración de usuarios (Backstage exige Admin) y cambio de la propia contraseña.
-  ~^POST\ /backstage/api/access/(users|users/[a-z]+\.[a-z]+/(reset-password|unlock)|me/password|products|business-lines|repository-types|projects/[^/]+/products|activity)\ .*$ 1;
+  ~^POST\ /backstage/api/access/(users|users/[a-z]+\.[a-z]+/(reset-password|unlock)|me/password|products|business-lines|repository-types|projects/[^/]+/products|projects/[^/]+/business-lines|activity)\ .*$ 1;
   ~^(PATCH|DELETE)\ /backstage/api/access/users/[a-z]+\.[a-z]+\ .*$ 1;
   # Alcances (organizaciones y proyectos por grupo); Backstage exige Admin.
   ~^(PUT|DELETE)\ /backstage/api/access/scopes/[a-z][a-z0-9-]+\ .*$ 1;

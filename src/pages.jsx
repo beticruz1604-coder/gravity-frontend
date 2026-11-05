@@ -26,7 +26,7 @@ import {
   isDeployable,
   repoOf
 } from "./backstage";
-import { useWorkspace, workspaceAgentPools, workspaceComponents, workspacePipelines } from "./workspace";
+import { useWorkspace, workspaceComponents, workspacePipelines } from "./workspace";
 import { TemplateButton } from "./TemplateRunner";
 import { useNav } from "./nav";
 import { PipelineStatus, Percent } from "./status";
@@ -658,18 +658,17 @@ export function HomologationPage() {
 export function RepositoriesPage() {
   const { openEntity } = useNav();
   const loader = useData(async () => {
-    const [components, groups, rules, parity, baseline] = await Promise.all([
+    // Sin datos de homologación: esa sección no es de la shortlist y está oculta.
+    const [components, groups, rules] = await Promise.all([
       workspaceComponents(),
       catalog.groups().catch(() => []),
-      branching.rules(),
-      homologation.components().catch(() => ({ items: [] })),
-      homologation.baseline().catch(() => ({ items: [] }))
+      branching.rules()
     ]);
-    return { components, groups, rules, parity: parity.items, baseline: baseline.items };
+    return { components, groups, rules };
   }, { interval: 60000 });
   const [search, setSearch] = React.useState("");
 
-  const { components = [], groups = [], rules, parity = [], baseline = [] } = loader.data ?? {};
+  const { components = [], groups = [], rules } = loader.data ?? {};
   const rows = components
     .filter((entity) => annotation(entity, "dev.azure.com/project-repo"))
     .filter((entity) => entity.metadata.name.toLowerCase().includes(search.toLowerCase()))
@@ -680,9 +679,7 @@ export function RepositoriesPage() {
         entity,
         name,
         repo,
-        level: rules?.repositoryLevels?.[repo] ?? rules?.defaultLevel ?? "—",
-        parity: parity.find((p) => p.component === name),
-        baseline: baseline.find((b) => b.component === name)
+        level: rules?.repositoryLevels?.[repo] ?? rules?.defaultLevel ?? "—"
       };
     });
 
@@ -691,14 +688,13 @@ export function RepositoriesPage() {
       <Heading
         eyebrow="CÓDIGO"
         title="Repositories"
-        description="Componentes del catálogo con su repositorio de Azure DevOps, nivel de criticidad, línea base y estado de despliegue."
+        description="Componentes del catálogo con su repositorio, división y nivel; desde aquí se piden ramas y pull requests."
         actions={<TemplateButton template="crear-rama" label="Crear rama" className="create-button" onFinished={loader.reload} />}
       />
 
       <Stats
         items={[
           ["Repositorios", rows.length],
-          ["Con línea base conforme", rows.filter((r) => r.baseline?.status === "conforme").length],
           ["Nivel core", rows.filter((r) => r.level === "core").length],
           ["Golden Path", rows.filter((r) => annotation(r.entity, "devops.lab/golden-path")).length]
         ]}
@@ -722,13 +718,11 @@ export function RepositoriesPage() {
                 <th>Tipo</th>
                 <th>División</th>
                 <th>Nivel</th>
-                <th>Línea base</th>
-                <th>Paridad</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && <EmptyRow colSpan={7} loading={loader.loading && !loader.data}>No hay repositorios registrados.</EmptyRow>}
+              {rows.length === 0 && <EmptyRow colSpan={5} loading={loader.loading && !loader.data}>No hay repositorios registrados.</EmptyRow>}
               {rows.map((row) => (
                 <tr key={row.name}>
                   <td>
@@ -737,8 +731,6 @@ export function RepositoriesPage() {
                   <td>{row.entity.spec?.type ?? "—"}</td>
                   <td>{ownerLabel(row.entity, groups)}</td>
                   <td>{row.level}</td>
-                  <td>{row.baseline ? <StatusBadge status={row.baseline.status === "conforme" ? "homologado" : "en-revision"} /> : "—"}</td>
-                  <td>{row.parity ? <StatusBadge status={row.parity.status} /> : "—"}</td>
                   <td className="row-actions">
                     <TemplateButton template="integrar-cambios" preset={{ component: row.name }} label="Integrar" onFinished={loader.reload} />
                     <TemplateButton template="crear-rama" preset={{ component: row.name }} label="Rama" onFinished={loader.reload} />
@@ -1228,27 +1220,18 @@ export function ComplianceIqPage() {
 /* ----------------------------------------------------------------- Resumen */
 
 export function SummaryPage({ onNavigate }) {
+  // Solo lo de la shortlist de la Prueba de Valor: catálogo, repositorios (Golden Paths) y operaciones de Autoservicio.
   const loader = useData(async () => {
     const settle = (promise) => promise.then((value) => ({ value }), (error) => ({ error: error.message }));
-    const [homologationItems, pipelines, pools, tasks, parity] = await Promise.all([
-      settle(homologation.items()),
-      settle(workspacePipelines()),
-      settle(workspaceAgentPools()),
-      settle(scaffolder.tasks(10)),
-      settle(homologation.components())
-    ]);
-    return { homologationItems, pipelines, pools, tasks, parity };
+    const [components, tasks] = await Promise.all([settle(workspaceComponents()), settle(scaffolder.tasks(50))]);
+    return { components, tasks };
   }, { interval: 60000 });
 
   const d = loader.data ?? {};
-  const items = d.homologationItems?.value?.items ?? [];
-  const pipelines = d.pipelines?.value?.pipelines ?? [];
-  const pools = d.pools?.value?.pools ?? [];
-  const parity = d.parity?.value?.items ?? [];
+  const components = d.components?.value ?? [];
   const tasks = d.tasks?.value?.tasks ?? [];
-  const agents = pools.reduce((sum, pool) => sum + pool.total, 0);
-  const online = pools.reduce((sum, pool) => sum + pool.available + pool.busy, 0);
-  const failed = pipelines.filter((p) => p.status === "Fallida").length;
+  const repos = components.filter((e) => annotation(e, "dev.azure.com/project-repo") || annotation(e, "github.com/project-slug"));
+  const templateOf = (t) => (t.spec?.templateInfo?.entityRef ?? "").split("/").pop();
 
   const card = (title, page, lines, error) => (
     <div className="module-panel summary-card" key={title}>
@@ -1267,30 +1250,23 @@ export function SummaryPage({ onNavigate }) {
       <Heading
         eyebrow="GRAVITY"
         title="Resumen"
-        description="Vista general de la plataforma: homologación, pipelines, agentes y la actividad reciente del IDP."
+        description="Vista general de las iniciativas de la Prueba de Valor: catálogo, repositorios y operaciones de Autoservicio."
         actions={<Refresh loader={loader} />}
       />
       <div className="summary-grid">
-        {card("Homologación", "Homologation Status", [
-          ["Homologados", items.filter((i) => i.status === "homologado").length],
-          ["Pendientes", items.filter((i) => i.status === "pendiente").length],
-          ["En revisión", items.filter((i) => i.status === "en-revision").length]
-        ], d.homologationItems?.error)}
-        {card("Pipelines", "Pipelines", [
-          ["Pipelines", pipelines.length],
-          ["Última ejecución fallida", <span key="failed" className={failed > 0 ? "status-text status-failed" : ""}>{failed}</span>],
-          ["Ejecuciones", pipelines.reduce((sum, p) => sum + p.executions, 0)]
-        ], d.pipelines?.error)}
-        {card("Pool de agentes", "Pool de Agentes", [
-          ["Pools", pools.length],
-          ["Agentes", agents],
-          ["En línea", online]
-        ], d.pools?.error)}
-        {card("Releases", "Releases", [
-          ["Homologados", parity.filter((p) => p.status === "homologado").length],
-          ["Incompletos", parity.filter((p) => p.status === "incompleto").length],
-          ["Sin versión", parity.filter((p) => p.status === "sin-version").length]
-        ], d.parity?.error)}
+        {card("Catálogo", "Catálogo", [
+          ["Componentes", components.length],
+          ["Con repositorio", repos.length]
+        ], d.components?.error)}
+        {card("Repositorios", "Repositories", [
+          ["Repositorios", repos.length],
+          ["Desde un Golden Path", repos.filter((e) => annotation(e, "devops.lab/golden-path")).length]
+        ], d.components?.error)}
+        {card("Autoservicio", "Pipeline Engine (IDP)", [
+          ["Repositorios creados", tasks.filter((t) => t.status === "completed" && (templateOf(t) === "crear-repositorio" || templateOf(t).startsWith("golden-"))).length],
+          ["Ramas creadas", tasks.filter((t) => t.status === "completed" && templateOf(t) === "crear-rama").length],
+          ["Pull requests", tasks.filter((t) => t.status === "completed" && templateOf(t) === "integrar-cambios").length]
+        ], d.tasks?.error)}
       </div>
 
       <div className="module-panel panel-spaced">
@@ -1581,17 +1557,21 @@ function ProjectsPanel({ busy, run }) {
   ];
   const keys = [...new Set([...all, ...profiles.map((p) => p.project)])].sort();
   const [editing, setEditing] = React.useState(null);
-  const [draft, setDraft] = React.useState({ division: "", domains: "" });
+  const [draft, setDraft] = React.useState({ division: "", domains: "", lines: "" });
   const [product, setProduct] = React.useState("");
   const start = (key) => {
     const p = profiles.find((x) => x.project === key);
     setEditing(key);
-    setDraft({ division: p?.division ?? "", domains: (p?.domains ?? []).join(", ") });
+    setDraft({ division: p?.division ?? "", domains: (p?.domains ?? []).join(", "), lines: (p?.businessLines ?? []).join(", ") });
     setProduct("");
   };
   const save = () =>
     run(async () => {
-      await access.saveProject(editing, { division: draft.division, domains: draft.domains.split(",").map((d) => d.trim()).filter(Boolean) });
+      await access.saveProject(editing, {
+        division: draft.division,
+        domains: draft.domains.split(",").map((d) => d.trim()).filter(Boolean),
+        businessLines: draft.lines.split(",").map((d) => d.trim().toLowerCase()).filter(Boolean)
+      });
       if (product.trim()) await access.addProjectProduct(editing, product.trim());
       setEditing(null);
       loader.reload();
@@ -1609,9 +1589,9 @@ function ProjectsPanel({ busy, run }) {
       </div>
       <div className="table-wrapper">
         <table className="pool-table">
-          <thead><tr><th>Proyecto</th><th>División</th><th>Dominios / Torres</th><th>Productos</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Proyecto</th><th>División</th><th>Líneas de negocio</th><th>Dominios / Torres</th><th>Productos</th><th>Acciones</th></tr></thead>
           <tbody>
-            {keys.length === 0 && <EmptyRow colSpan={5} loading={loader.loading}>Sin proyectos.</EmptyRow>}
+            {keys.length === 0 && <EmptyRow colSpan={6} loading={loader.loading}>Sin proyectos.</EmptyRow>}
             {keys.map((key) => {
               const p = profiles.find((x) => x.project === key);
               const isEditing = editing === key;
@@ -1629,6 +1609,11 @@ function ProjectsPanel({ busy, run }) {
                         {DIVISIONS.map(([ref, name]) => <option key={ref} value={ref}>{name}</option>)}
                       </select>
                     ) : p ? label(p.division) : <span className="field-error">Sin ficha</span>}
+                  </td>
+                  <td>
+                    {isEditing ? (
+                      <input type="text" className="inline-input" value={draft.lines} onChange={(e) => setDraft({ ...draft, lines: e.target.value })} placeholder="cds" />
+                    ) : (p?.businessLines ?? []).join(", ") || "—"}
                   </td>
                   <td>
                     {isEditing ? (
