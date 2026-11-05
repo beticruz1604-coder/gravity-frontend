@@ -302,6 +302,10 @@ export const access = {
   resetPassword: (username) => request(`/api/access/users/${encodeURIComponent(username)}/reset-password`, { method: "POST" }),
   unlockUser: (username) => request(`/api/access/users/${encodeURIComponent(username)}/unlock`, { method: "POST" }),
   deleteUser: (username) => request(`/api/access/users/${encodeURIComponent(username)}`, { method: "DELETE" }),
+  /** Alcances: organizaciones y proyectos de Azure DevOps y organizaciones de GitHub por grupo de personas (solo Admin). */
+  scopes: () => request("/api/access/scopes"),
+  saveScope: (id, body) => request(`/api/access/scopes/${encodeURIComponent(id)}`, { method: "PUT", body }),
+  deleteScope: (id) => request(`/api/access/scopes/${encodeURIComponent(id)}`, { method: "DELETE" }),
   changePassword: (body) => request("/api/access/me/password", { method: "POST", body }),
   /** Productos de la organización (campo «Producto» de los Golden Paths). */
   products: () => request("/api/access/products"),
