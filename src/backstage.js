@@ -379,7 +379,7 @@ export const branching = {
   repositoryExists: (name, project = PROJECT) =>
     request(`/api/branching/repositories/${enc(project)}/${enc(name)}`),
   /** Reglas de la sección «Creación de Repositorios»: qué aplica GRAVITY y qué queda pendiente. */
-  repositoryRules: () => request("/api/branching/repository-rules"),
+  repositoryRules: (platform) => request(`/api/branching/repository-rules${platform ? `?platform=${platform}` : ""}`),
   /** Organizaciones y proyectos de Azure DevOps y cuentas de GitHub donde se puede crear un repositorio. */
   repositoryTargets: () => request("/api/branching/repository-targets", { timeout: 60000 }),
   /** ¿Se puede crear el repositorio? Nombre según las reglas, que no exista y que el proyecto sea privado. */
