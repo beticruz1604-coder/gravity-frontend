@@ -2368,7 +2368,7 @@ function App() {
 
   return (
     <NavContext.Provider value={navValue}>
-    <WorkspaceProvider enabled={showPages}>
+    <WorkspaceProvider enabled={showPages} admin={access.admin}>
     <div className="app">
       <NewVersionBanner />
       <Sidebar

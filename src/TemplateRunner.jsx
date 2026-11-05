@@ -26,7 +26,7 @@ import {
   repoOf
 } from "./backstage";
 import { TASK_STATUS_TEXT, TaskStatus } from "./status";
-import { componentProject, useWorkspace, workspaceComponents } from "./workspace";
+import { componentProject, useProjectProfile, useWorkspace, workspaceComponents } from "./workspace";
 
 /*
  * Ejecutor de plantillas de Backstage dentro de GRAVITY.
@@ -307,7 +307,10 @@ const ADD_PRODUCT = "__agregar__";
  * si el producto no está, «Agregar producto» lo da de alta para todos y queda elegido.
  */
 function ProductField({ definition, required, value, onChange, error }) {
-  const state = useAsync(() => access.products(), []);
+  // Con ficha de proyecto: solo los productos del proyecto (proyecto-división); el alta queda en ese proyecto.
+  const project = useProjectProfile();
+  const byProject = Boolean(project.profile);
+  const state = useAsync(() => (project.loading ? Promise.resolve(null) : byProject ? Promise.resolve({ products: project.profile.products }) : access.products()), [project.loading, project.key]);
   const [added, setAdded] = React.useState([]);
   const [adding, setAdding] = React.useState(false);
   const [draft, setDraft] = React.useState("");
@@ -322,7 +325,7 @@ function ProductField({ definition, required, value, onChange, error }) {
     setSaving(true);
     setSaveError("");
     try {
-      const { product } = await access.addProduct(draft);
+      const { product } = byProject ? await access.addProjectProduct(project.key, draft) : await access.addProduct(draft);
       setAdded((current) => [...current, product.name]);
       onChange(product.name);
       setAdding(false);
@@ -552,9 +555,10 @@ function WorkspaceTargetField({ definition, value, onChange, options = {} }) {
   if (!options.display) return null;
   let problem = "";
   if (!workspace) problem = "No tienes organizaciones en tu alcance; pide al Admin que te asigne una.";
+  else if (workspace.platform === "all") problem = "Elige una organización y un proyecto en el encabezado (ahora está «Todas las organizaciones»).";
   else if (!allowed.includes(workspace.platform)) problem = "Esto se crea en Azure DevOps: elige una organización de Azure DevOps en el encabezado.";
   else if (workspace.platform === "azure" && !workspace.project) problem = "Elige un proyecto en el encabezado (ahora está «Todos los proyectos»).";
-  const where = !workspace
+  const where = !workspace || workspace.platform === "all"
     ? "—"
     : workspace.platform === "github"
       ? `GitHub · ${workspace.organization}`
@@ -565,6 +569,128 @@ function WorkspaceTargetField({ definition, value, onChange, options = {} }) {
       <p>{where}</p>
       {problem ? <p className="field-error">{problem}</p> : <p>Para cambiarlo, usa el selector de organización y proyecto del encabezado.</p>}
     </div>
+  );
+}
+
+const DIVISION_LABEL = { "group:default/cadena-de-suministro": "Cadena de Suministro", "group:default/digital": "Digital" };
+
+/**
+ * División («Crear repositorio», Golden Paths): la de la ficha del proyecto del encabezado; solo se muestra. Sin ficha (por
+ * ejemplo, un proyecto nuevo), se elige de la lista hasta que el Admin le asigne su división.
+ */
+function ProjectDivisionField({ definition, required, value, onChange, error }) {
+  const project = useProjectProfile();
+  const fixed = project.profile?.division;
+  React.useEffect(() => {
+    if (fixed && value !== fixed) onChange(fixed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixed]);
+  if (project.loading) return <div className="preview-box"><strong>{definition.title}</strong><p>Consultando la ficha del proyecto…</p></div>;
+  if (fixed) {
+    return (
+      <div className="preview-box">
+        <strong>{definition.title}</strong>
+        <p>{DIVISION_LABEL[fixed] ?? fixed.replace(/^group:default\//, "")}</p>
+        <p>Es la división del proyecto {project.key?.split(":")[1] ?? project.key}.</p>
+      </div>
+    );
+  }
+  return (
+    <FieldShell definition={definition} required={required} error={error} help="Este proyecto no tiene ficha: el Admin puede asignarle su división en Usuarios › Proyectos.">
+      <select value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)}>
+        <option value="">Selecciona una opción</option>
+        {Object.entries(DIVISION_LABEL).map(([ref, label]) => <option key={ref} value={ref}>{label}</option>)}
+      </select>
+    </FieldShell>
+  );
+}
+
+/** Dominio / Torre: los de la ficha del proyecto del encabezado; sin ficha, la lista general. */
+function ProjectDomainField({ definition, required, value, onChange, error }) {
+  const project = useProjectProfile();
+  const general = useAsync(() => access.classification?.() ?? Promise.resolve(null), []);
+  const domains = project.profile?.domains?.length ? project.profile.domains : (general.data?.domains ?? ["OMS", "TMS", "WMS", "Digital"]);
+  React.useEffect(() => {
+    if (value && domains.length && !domains.includes(value)) onChange(undefined);
+    else if (!value && domains.length === 1) onChange(domains[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [domains.join("|")]);
+  return (
+    <FieldShell definition={definition} required={required} error={error} help={project.loading ? "Consultando la ficha del proyecto…" : undefined}>
+      <select value={value ?? ""} disabled={project.loading} onChange={(e) => onChange(e.target.value || undefined)}>
+        <option value="">Selecciona una opción</option>
+        {domains.map((d) => <option key={d} value={d}>{d}</option>)}
+      </select>
+    </FieldShell>
+  );
+}
+
+/**
+ * Tipo del nombre del repositorio: se ve la clave (api, web…); es opcional, pero sin tipo el nombre no cumple el EST02 4.2 ni el
+ * Anexo A 2.3. «Agregar tipo» lo da de alta para todos con su descripción.
+ */
+function RepositoryTypeField({ definition, required, value, onChange, error }) {
+  const state = useAsync(() => access.repositoryTypes(), []);
+  const [added, setAdded] = React.useState([]);
+  const [adding, setAdding] = React.useState(false);
+  const [code, setCode] = React.useState("");
+  const [name, setName] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState("");
+  const types = [...(state.data?.types ?? []), ...added.filter((a) => !(state.data?.types ?? []).some((t) => t.code === a.code))];
+  const save = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      const { type } = await access.addRepositoryType({ code: code.trim().toLowerCase(), name: name.trim() });
+      setAdded((current) => [...current, type]);
+      onChange(type.code);
+      setAdding(false);
+      setCode("");
+      setName("");
+    } catch (err) {
+      setSaveError(err.message.replace(/ \(HTTP \d+\)$/, ""));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const current = types.find((t) => t.code === value);
+  return (
+    <FieldShell
+      definition={definition}
+      required={required}
+      error={error || saveError || state.error}
+      help={state.loading ? "Cargando tipos…" : current ? current.name : !value ? "Sin tipo, el nombre no cumple el EST02 4.2 ni el Anexo A 2.3." : undefined}
+    >
+      <select
+        value={adding ? ADD_PRODUCT : value ?? ""}
+        disabled={state.loading}
+        onChange={(e) => {
+          if (e.target.value === ADD_PRODUCT) {
+            setAdding(true);
+            return;
+          }
+          setAdding(false);
+          onChange(e.target.value || undefined);
+        }}
+      >
+        <option value="">— Sin tipo —</option>
+        {types.map((t) => <option key={t.code} value={t.code} title={t.name}>{t.code}</option>)}
+        <option value={ADD_PRODUCT}>＋ Agregar tipo…</option>
+      </select>
+      {adding && (
+        <div className="inline-add">
+          <input value={code} autoFocus maxLength={12} placeholder="Clave, p. ej. batch" onChange={(e) => setCode(e.target.value.toLowerCase())} />
+          <input value={name} maxLength={60} placeholder="Descripción, p. ej. procesos por lotes" onChange={(e) => setName(e.target.value)} />
+          <button type="button" className="create-primary-button" disabled={saving || code.trim().length < 2 || name.trim().length < 2} onClick={save}>
+            {saving ? <Loader2 size={14} className="spin" /> : <Plus size={14} />} Agregar
+          </button>
+          <button type="button" className="create-secondary-button" onClick={() => { setAdding(false); setSaveError(""); }}>
+            Cancelar
+          </button>
+        </div>
+      )}
+    </FieldShell>
   );
 }
 
@@ -686,7 +812,7 @@ function RepositoryNameCheckField({ definition, onChange, options = {}, form, er
 
   React.useEffect(() => {
     setState({});
-    if (!line || !app || !type || !project) {
+    if (!line || !app || !project) {
       onChange(undefined);
       return undefined;
     }
@@ -705,7 +831,7 @@ function RepositoryNameCheckField({ definition, onChange, options = {}, form, er
           // Sin conexión no se bloquea: la tarea vuelve a comprobar todo antes de crear el repositorio.
           if (!cancelled) {
             setState({ error: err.message });
-            onChange([line, app, type].join("-"));
+            onChange([line, app, type].filter(Boolean).join("-"));
           }
         });
     }, 400);
@@ -718,8 +844,8 @@ function RepositoryNameCheckField({ definition, onChange, options = {}, form, er
 
   const { result, error, loading } = state;
   let body;
-  if (!line || !app || !type) {
-    body = <p>Completa la línea de negocio, la aplicación y el tipo para comprobar el nombre.</p>;
+  if (!line || !app) {
+    body = <p>Completa la línea de negocio y la aplicación (y el tipo) para comprobar el nombre.</p>;
   } else if (loading) {
     body = <p>Comprobando el nombre del repositorio…</p>;
   } else if (error) {
@@ -1087,6 +1213,12 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
       return <ComponentProjectField {...common} options={options} form={form} />;
     case "WorkspaceTarget":
       return <WorkspaceTargetField {...common} options={options} />;
+    case "ProjectDivision":
+      return <ProjectDivisionField {...common} />;
+    case "ProjectDomain":
+      return <ProjectDomainField {...common} />;
+    case "RepositoryTypePicker":
+      return <RepositoryTypeField {...common} />;
     case "BusinessLinePicker":
       return <BusinessLineField {...common} />;
     case "RepositoryTarget":

@@ -36,7 +36,7 @@ map "$request_method $uri $args" $ruta_permitida {
   ~^(GET|HEAD)\ /backstage/api/(catalog/entities|catalog/entities/by-name/[^/]+/[^/]+/[^/]+|scorecards/components|kubernetes/clusters|techdocs/metadata/techdocs/[^/]+/component/[^/]+|techdocs/static/docs/[^/]+/component/[^/]+/(?!.*\.\.)[A-Za-z0-9._/-]*)\ .*$ 1;
   ~^(GET|HEAD)\ /backstage/api/homologation/(items|health|components|baseline|requirements)(/[^/]+)?\ .*$ 1;
   ~^(GET|HEAD)\ /backstage/api/branching/(rules|repository-rules|repository-targets|health|pipelines/[^/]+|agent-pools/[^/]+|repositories/[^/]+/[^/]+|branches/[^/]+/[^/]+|policies/[^/]+/[^/]+)\ .*$ 1;
-  ~^(GET|HEAD)\ /backstage/api/access/(me|roles|users|scopes|products|business-lines|audit/events|audit/operations)\ .*$ 1;
+  ~^(GET|HEAD)\ /backstage/api/access/(me|roles|users|scopes|products|business-lines|repository-types|projects|projects/[^/]+|audit/events|audit/operations)\ .*$ 1;
   # Historial de informes de Release Management (solo lectura).
   ~^(GET|HEAD)\ /backstage/api/rm/(reports|reports/[0-9a-f]+|components)\ .*$ 1;
   # Inicio de sesión del laboratorio (usuario y contraseña): Backstage entrega el token de la persona en /auth/lab/refresh.
@@ -45,10 +45,13 @@ map "$request_method $uri $args" $ruta_permitida {
 
   ~^POST\ /backstage/api/scaffolder/v2/(tasks|tasks/[^/]+/cancel)\ .*$ 1;
   # Administración de usuarios (Backstage exige Admin) y cambio de la propia contraseña.
-  ~^POST\ /backstage/api/access/(users|users/[a-z]+\.[a-z]+/(reset-password|unlock)|me/password|products|business-lines|activity)\ .*$ 1;
+  ~^POST\ /backstage/api/access/(users|users/[a-z]+\.[a-z]+/(reset-password|unlock)|me/password|products|business-lines|repository-types|projects/[^/]+/products|activity)\ .*$ 1;
   ~^(PATCH|DELETE)\ /backstage/api/access/users/[a-z]+\.[a-z]+\ .*$ 1;
   # Alcances (organizaciones y proyectos por grupo); Backstage exige Admin.
   ~^(PUT|DELETE)\ /backstage/api/access/scopes/[a-z][a-z0-9-]+\ .*$ 1;
+  # Fichas de proyecto (Admin) y baja de productos (Admin).
+  ~^PUT\ /backstage/api/access/projects/[^/]+\ .*$ 1;
+  ~^DELETE\ /backstage/api/access/projects/[^/]+/products/[^/]+\ .*$ 1;
   ~^POST\ /backstage/api/branching/(preview|branch-name|repository-check|validate)\ .*$ 1;
   ~^POST\ /backstage/api/kubernetes/services/[^/]+\ .*$ 1;
   ~^POST\ /backstage/api/catalog/locations\ (dryRun=true)?$ 1;

@@ -1,6 +1,6 @@
 import React from "react";
 import { ChevronDown, GitBranch } from "lucide-react";
-import { branching, catalog } from "./backstage";
+import { access, branching, catalog } from "./backstage";
 
 /*
  * Selección global de organización y proyecto (encabezado de GRAVITY). Coppel tiene varias organizaciones de Azure DevOps,
@@ -33,7 +33,9 @@ let active = { workspace: null, targets: null };
 const WorkspaceContext = React.createContext({ workspace: null, targets: null, setWorkspace: () => {} });
 
 /** La selección guardada si sigue dentro del alcance; si no, la primera organización disponible y todos sus proyectos. */
-function valid(w, targets) {
+function valid(w, targets, admin) {
+  // Admin: «Todas las organizaciones» (todo el catálogo y todas las pantallas sin filtro).
+  if (admin && w?.platform === "all") return { platform: "all", organization: "", project: "" };
   const orgs = targets?.azure?.organizations ?? [];
   const owners = targets?.github?.owners ?? [];
   if (w?.platform === "github" && owners.includes(w.organization)) return { platform: "github", organization: w.organization, project: "" };
@@ -46,7 +48,7 @@ function valid(w, targets) {
   return null;
 }
 
-export function WorkspaceProvider({ enabled, children }) {
+export function WorkspaceProvider({ enabled, admin = false, children }) {
   const [targets, setTargets] = React.useState(null);
   const [workspace, setState] = React.useState(read);
 
@@ -62,13 +64,13 @@ export function WorkspaceProvider({ enabled, children }) {
     };
   }, [enabled]);
 
-  const current = targets ? valid(workspace, targets) : null;
+  const current = targets ? valid(workspace, targets, admin) : null;
   active = { workspace: current, targets };
   const setWorkspace = React.useCallback((w) => {
     write(w);
     setState(w);
   }, []);
-  const value = React.useMemo(() => ({ workspace: current, targets, setWorkspace }), [current?.platform, current?.organization, current?.project, targets, setWorkspace]);
+  const value = React.useMemo(() => ({ workspace: current, targets, setWorkspace, admin }), [current?.platform, current?.organization, current?.project, targets, setWorkspace, admin]);
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
@@ -92,7 +94,7 @@ export function componentProject(entity) {
 
 /** ¿El componente está en la organización y el proyecto elegidos? Los que no son de un repositorio no se filtran. */
 export function inWorkspace(entity, workspace, defaultOrganization) {
-  if (!workspace) return true;
+  if (!workspace || workspace.platform === "all") return true;
   const where = componentProject(entity);
   if (!where) return entity?.kind !== "Component";
   if (where.startsWith("github:")) return workspace.platform === "github" && where.slice(7) === workspace.organization;
@@ -103,6 +105,9 @@ export function inWorkspace(entity, workspace, defaultOrganization) {
 
 /** Proyectos de la selección como <organización>:<proyecto> (todos los de la organización si no se eligió uno). */
 export function workspaceProjects(workspace, targets) {
+  if (workspace?.platform === "all") {
+    return (targets?.azure?.organizations ?? []).flatMap((o) => o.projects.map((p) => `${o.name}:${p.name}`));
+  }
   if (!workspace || workspace.platform !== "azure") return [];
   const org = (targets?.azure?.organizations ?? []).find((o) => o.name === workspace.organization);
   const names = workspace.project ? [workspace.project] : (org?.projects ?? []).map((p) => p.name);
@@ -111,7 +116,7 @@ export function workspaceProjects(workspace, targets) {
 
 /** Selector del encabezado: organización (Azure DevOps y GitHub) y proyecto (solo Azure DevOps). */
 export function WorkspaceSelector() {
-  const { workspace, targets, setWorkspace } = useWorkspace();
+  const { workspace, targets, setWorkspace, admin } = useWorkspace();
   if (!targets) return null;
   const orgs = targets.azure?.organizations ?? [];
   const owners = targets.github?.owners ?? [];
@@ -125,6 +130,10 @@ export function WorkspaceSelector() {
   }
   const org = orgs.find((o) => o.name === workspace.organization);
   const onOrg = (value) => {
+    if (value === "all:") {
+      setWorkspace({ platform: "all", organization: "", project: "" });
+      return;
+    }
     const [platform, ...rest] = value.split(":");
     setWorkspace({ platform, organization: rest.join(":"), project: "" });
   };
@@ -135,6 +144,7 @@ export function WorkspaceSelector() {
         <label className="workspace-select">
           <GitBranch size={13} />
           <select aria-label="Organización" value={`${workspace.platform}:${workspace.organization}`} onChange={(e) => onOrg(e.target.value)}>
+            {admin && <option value="all:">Todas las organizaciones</option>}
             {orgs.length > 0 && (
               <optgroup label="Azure DevOps">
                 {orgs.map((o) => <option key={o.name} value={`azure:${o.name}`}>{o.name}</option>)}
@@ -188,4 +198,35 @@ export async function workspacePipelines() {
 export async function workspaceAgentPools() {
   const [first] = workspaceProjects(active.workspace, active.targets);
   return first ? branching.agentPools(first) : { pools: [] };
+}
+
+/** <organización>:<proyecto> del encabezado (GitHub: github:<organización>); undefined si falta elegir un proyecto. */
+export function workspaceProjectKey(workspace) {
+  if (!workspace) return undefined;
+  if (workspace.platform === "github") return `github:${workspace.organization}`;
+  if (workspace.platform !== "azure" || !workspace.project) return undefined;
+  return `${workspace.organization}:${workspace.project}`;
+}
+
+/** Ficha del proyecto del encabezado (división, dominios y productos); null si el proyecto no tiene ficha. */
+export function useProjectProfile() {
+  const { workspace } = useWorkspace();
+  const key = workspaceProjectKey(workspace);
+  const [state, setState] = React.useState({ loading: Boolean(key), profile: null, key });
+  React.useEffect(() => {
+    if (!key) {
+      setState({ loading: false, profile: null, key });
+      return undefined;
+    }
+    let cancelled = false;
+    setState({ loading: true, profile: null, key });
+    access
+      .project(key)
+      .then((r) => !cancelled && setState({ loading: false, profile: r.profile, key }))
+      .catch((err) => !cancelled && setState({ loading: false, profile: null, key, error: err.status === 404 ? "" : err.message }));
+    return () => {
+      cancelled = true;
+    };
+  }, [key]);
+  return state;
 }

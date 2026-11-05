@@ -1564,6 +1564,100 @@ function ScopesPanel({ scopes, requireScope, busy, run }) {
   );
 }
 
+const DIVISIONS = [["group:default/cadena-de-suministro", "Cadena de Suministro"], ["group:default/digital", "Digital"]];
+
+/**
+ * Fichas de proyecto (solo Admin): la división de cada proyecto (un proyecto por división), sus dominios / torres y sus
+ * productos. Los formularios que crean algo solo ofrecen los del proyecto elegido en el encabezado.
+ */
+function ProjectsPanel({ busy, run }) {
+  const { targets } = useWorkspace();
+  const loader = useData(() => access.projects());
+  const profiles = loader.data?.projects ?? [];
+  const all = (targets?.azure?.organizations ?? []).flatMap((o) => o.projects.map((p) => `${o.name}:${p.name}`));
+  const keys = [...new Set([...all, ...profiles.map((p) => p.project)])].sort();
+  const [editing, setEditing] = React.useState(null);
+  const [draft, setDraft] = React.useState({ division: "", domains: "" });
+  const [product, setProduct] = React.useState("");
+  const start = (key) => {
+    const p = profiles.find((x) => x.project === key);
+    setEditing(key);
+    setDraft({ division: p?.division ?? "", domains: (p?.domains ?? []).join(", ") });
+    setProduct("");
+  };
+  const save = () =>
+    run(async () => {
+      await access.saveProject(editing, { division: draft.division, domains: draft.domains.split(",").map((d) => d.trim()).filter(Boolean) });
+      if (product.trim()) await access.addProjectProduct(editing, product.trim());
+      setEditing(null);
+      loader.reload();
+    });
+  const removeProduct = (key, name) => {
+    if (window.confirm(`¿Quitar el producto ${name} de ${key}?`)) run(async () => { await access.deleteProjectProduct(key, name); loader.reload(); });
+  };
+  const label = (ref) => DIVISIONS.find(([r]) => r === ref)?.[1] ?? (ref ? ref.replace(/^group:default\//, "") : "—");
+
+  return (
+    <div className="module-panel panel-spaced">
+      <div className="panel-title">
+        <strong>Proyectos</strong>
+        <small>División, dominios / torres y productos de cada proyecto. Los productos también los agregan SCM y Líderes Técnicos desde los formularios.</small>
+      </div>
+      <div className="table-wrapper">
+        <table className="pool-table">
+          <thead><tr><th>Proyecto</th><th>División</th><th>Dominios / Torres</th><th>Productos</th><th>Acciones</th></tr></thead>
+          <tbody>
+            {keys.length === 0 && <EmptyRow colSpan={5} loading={loader.loading}>Sin proyectos.</EmptyRow>}
+            {keys.map((key) => {
+              const p = profiles.find((x) => x.project === key);
+              const isEditing = editing === key;
+              return (
+                <tr key={key}>
+                  <td><strong>{key.split(":")[1]}</strong><br /><small>{key.split(":")[0]}</small></td>
+                  <td>
+                    {isEditing ? (
+                      <select className="inline-input" value={draft.division} onChange={(e) => setDraft({ ...draft, division: e.target.value })}>
+                        <option value="">Selecciona</option>
+                        {DIVISIONS.map(([ref, name]) => <option key={ref} value={ref}>{name}</option>)}
+                      </select>
+                    ) : p ? label(p.division) : <span className="field-error">Sin ficha</span>}
+                  </td>
+                  <td>
+                    {isEditing ? (
+                      <input type="text" className="inline-input" value={draft.domains} onChange={(e) => setDraft({ ...draft, domains: e.target.value })} placeholder="OMS, TMS, WMS" />
+                    ) : (p?.domains ?? []).join(", ") || "—"}
+                  </td>
+                  <td>
+                    {(p?.products ?? []).map((x) => (
+                      <span key={x.name} className="product-chip">
+                        {x.name}
+                        {!x.fixed && <button type="button" className="link-button danger-link" title="Quitar" disabled={busy} onClick={() => removeProduct(key, x.name)}>×</button>}
+                      </span>
+                    ))}
+                    {isEditing && <input type="text" className="inline-input" value={product} onChange={(e) => setProduct(e.target.value)} placeholder="Agregar producto (opcional)" />}
+                    {!p?.products?.length && !isEditing && "—"}
+                  </td>
+                  <td className="user-actions">
+                    {isEditing ? (
+                      <>
+                        <button type="button" className="link-button" disabled={busy || !draft.division} onClick={save}>Guardar</button>
+                        <button type="button" className="link-button" onClick={() => setEditing(null)}>Cancelar</button>
+                      </>
+                    ) : (
+                      <button type="button" className="link-button" onClick={() => start(key)}>{p ? "Editar" : "Crear ficha"}</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <ErrorBox message={loader.error && `No fue posible consultar los proyectos. ${loader.error}`} />
+    </div>
+  );
+}
+
 /** Resultado de un alta o un restablecimiento: aviso de correo enviado o la contraseña temporal, que se muestra una sola vez. */
 function TemporaryPassword({ username, password, email, emailError, onClose }) {
   const [copied, setCopied] = React.useState(false);
@@ -1804,6 +1898,8 @@ export function UsersPage() {
       </div>
 
       <ScopesPanel scopes={scopes} requireScope={Boolean(loader.data?.requireScope)} busy={busy} run={run} />
+
+      <ProjectsPanel busy={busy} run={run} />
 
       <div className="module-panel panel-spaced">
         <div className="panel-title"><strong>Roles y secciones</strong><small>Qué ve cada rol en GRAVITY</small></div>
