@@ -568,23 +568,102 @@ function WorkspaceTargetField({ definition, value, onChange, options = {} }) {
   );
 }
 
-/** Línea de negocio: lista de branching.repositories.businessLines; si está vacía, texto libre. */
+/** Clave sugerida para una línea de negocio nueva: las iniciales del nombre, o la primera palabra si es una sola. */
+const suggestCode = (name) => {
+  const words = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+  const code = words.length > 1 ? words.map((w) => w[0]).join("") : (words[0] ?? "");
+  return code.slice(0, 12);
+};
+
+/**
+ * Línea de negocio («Crear repositorio»): se ve el nombre completo («Cadena de Suministro») y se guarda la clave que va en el
+ * nombre del repositorio («cds»). Si no está, «Agregar línea de negocio» la da de alta para todos con su clave.
+ */
 function BusinessLineField({ definition, required, value, onChange, error }) {
-  const state = useAsync(() => branching.repositoryRules(), []);
-  const lines = state.data?.config?.businessLines ?? [];
-  if (!state.loading && lines.length === 0) {
-    return (
-      <FieldShell definition={definition} required={required} error={error}>
-        <input value={value ?? ""} onChange={(e) => onChange(e.target.value.trim().toLowerCase() || undefined)} />
-      </FieldShell>
-    );
-  }
+  const state = useAsync(() => access.businessLines(), []);
+  const [added, setAdded] = React.useState([]);
+  const [adding, setAdding] = React.useState(false);
+  const [name, setName] = React.useState("");
+  const [code, setCode] = React.useState("");
+  const [codeTouched, setCodeTouched] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState("");
+  const lines = [...(state.data?.lines ?? []), ...added.filter((a) => !(state.data?.lines ?? []).some((l) => l.code === a.code))]
+    .sort((x, y) => x.name.localeCompare(y.name, "es"));
+
+  const save = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      const { line } = await access.addBusinessLine({ name: name.trim(), code: code.trim().toLowerCase() });
+      setAdded((current) => [...current, line]);
+      onChange(line.code);
+      setAdding(false);
+      setName("");
+      setCode("");
+      setCodeTouched(false);
+    } catch (err) {
+      setSaveError(err.message.replace(/ \(HTTP \d+\)$/, ""));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <FieldShell definition={definition} required={required} error={error || state.error} help={state.loading ? "Consultando…" : undefined}>
-      <select value={value ?? ""} disabled={state.loading} onChange={(e) => onChange(e.target.value || undefined)}>
-        <option value="">Selecciona una opción</option>
-        {lines.map((l) => <option key={l} value={l}>{l}</option>)}
+    <FieldShell
+      definition={definition}
+      required={required}
+      error={error || saveError || (state.error && `No se pudo leer la lista de líneas de negocio: ${state.error}`)}
+      help={state.loading ? "Cargando líneas de negocio…" : value ? `En el nombre del repositorio va como «${value}».` : undefined}
+    >
+      <select
+        value={adding ? ADD_PRODUCT : value ?? ""}
+        disabled={state.loading}
+        onChange={(e) => {
+          if (e.target.value === ADD_PRODUCT) {
+            setAdding(true);
+            return;
+          }
+          setAdding(false);
+          onChange(e.target.value || undefined);
+        }}
+      >
+        <option value="">Selecciona una línea de negocio</option>
+        {lines.map((l) => (
+          <option key={l.code} value={l.code}>{l.name}</option>
+        ))}
+        <option value={ADD_PRODUCT}>＋ Agregar línea de negocio…</option>
       </select>
+      {adding && (
+        <div className="inline-add">
+          <input
+            value={name}
+            autoFocus
+            maxLength={60}
+            placeholder="Nombre, p. ej. Servicios Financieros"
+            onChange={(e) => {
+              setName(e.target.value);
+              if (!codeTouched) setCode(suggestCode(e.target.value));
+            }}
+          />
+          <input
+            value={code}
+            maxLength={12}
+            placeholder="Clave, p. ej. sf"
+            title="Va en el nombre del repositorio: minúsculas y números, sin espacios ni guiones"
+            onChange={(e) => {
+              setCodeTouched(true);
+              setCode(e.target.value.toLowerCase());
+            }}
+          />
+          <button type="button" className="create-primary-button" disabled={saving || name.trim().length < 2 || code.trim().length < 2} onClick={save}>
+            {saving ? <Loader2 size={14} className="spin" /> : <Plus size={14} />} Agregar
+          </button>
+          <button type="button" className="create-secondary-button" onClick={() => { setAdding(false); setSaveError(""); }}>
+            Cancelar
+          </button>
+        </div>
+      )}
     </FieldShell>
   );
 }
@@ -1413,7 +1492,10 @@ function Gallery({ onPick, filter }) {
   const state = useAsync(() => catalog.templates(), []);
   const templates = (state.data ?? []).filter(filter ?? (() => true));
   const golden = templates.filter((t) => t.metadata.tags?.includes(GOLDEN_TAG));
-  const operations = templates.filter((t) => !t.metadata.tags?.includes(GOLDEN_TAG));
+  // «Crear repositorio» va primero en Operaciones.
+  const operations = templates
+    .filter((t) => !t.metadata.tags?.includes(GOLDEN_TAG))
+    .sort((a, b) => Number(Boolean(b.metadata.tags?.includes(REPOSITORY_TAG))) - Number(Boolean(a.metadata.tags?.includes(REPOSITORY_TAG))));
 
   function group(title, hint, list) {
     if (list.length === 0) {
