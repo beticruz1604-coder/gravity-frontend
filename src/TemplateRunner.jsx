@@ -231,6 +231,49 @@ function ComponentCard({ entity }) {
   );
 }
 
+/** Proyecto de un campo: el que eligió el formulario (projectField), el fijo de la plantilla o el predeterminado. */
+function projectOf(options = {}, form = {}) {
+  return form[options.projectField] || options.project || PROJECT;
+}
+
+/**
+ * Proyecto de Azure DevOps de un componente del catálogo: <organización>:<proyecto> si la ficha dice su organización
+ * (dev.azure.com/host-org), o solo el proyecto (organización predeterminada). GitHub: github:<organización>.
+ */
+export function componentProject(entity) {
+  const slug = entity?.metadata?.annotations?.["github.com/project-slug"];
+  if (slug) return `github:${slug.split("/")[0]}`;
+  const projectRepo = entity?.metadata?.annotations?.["dev.azure.com/project-repo"];
+  if (!projectRepo) return undefined;
+  const project = projectRepo.split("/")[0];
+  const hostOrg = entity?.metadata?.annotations?.["dev.azure.com/host-org"];
+  const org = hostOrg ? hostOrg.split("/").pop() : "";
+  return org ? `${org}:${project}` : project;
+}
+
+/** Organización y proyecto del componente elegido; se calculan solos y solo se muestran. */
+function ComponentProjectField({ definition, value, onChange, options = {}, form }) {
+  const state = useAsync(() => catalog.components(), []);
+  const entity = (state.data ?? []).find((e) => e.metadata.name === form[options.componentField]);
+  const project = entity ? componentProject(entity) : undefined;
+  React.useEffect(() => {
+    if (project !== value) onChange(project);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
+  if (!form[options.componentField]) return null;
+  const [org, name] = project?.includes(":") ? project.split(":") : ["", project];
+  return (
+    <div className="preview-box">
+      <strong>{definition.title}</strong>
+      <p>
+        {state.loading ? "Consultando el catálogo…" : project
+          ? (project.startsWith("github:") ? `GitHub · ${org}` : `${org || "Organización predeterminada"} · ${name}`)
+          : "El componente no indica su proyecto; se usará el predeterminado."}
+      </p>
+    </div>
+  );
+}
+
 function ComponentField({ definition, required, value, onChange, error }) {
   const state = useAsync(() => catalog.components(), []);
   const items = (state.data ?? []).filter(isDeployable);
@@ -492,8 +535,10 @@ function RepositoryNameCheckField({ definition, onChange, options = {}, form, er
   const organization = (form[options.organizationField] ?? "").trim();
   const azureProject = form[options.projectField] ?? options.project ?? "";
   const azureOrganization = form[options.azureOrganizationField] ?? "";
-  const project = github ? (organization ? `github:${organization}` : "") : azureProject;
-  const where = github ? `la organización ${organization} de GitHub` : `el proyecto ${project}${azureOrganization ? ` de ${azureOrganization}` : ""} en Azure DevOps`;
+  const project = github
+    ? (organization ? `github:${organization}` : "")
+    : (azureProject && azureOrganization ? `${azureOrganization}:${azureProject}` : azureProject);
+  const where = github ? `la organización ${organization} de GitHub` : `el proyecto ${azureProject}${azureOrganization ? ` de ${azureOrganization}` : ""} en Azure DevOps`;
   const line = (form[options.lineField] ?? "").trim();
   const app = (form[options.appField] ?? "").trim();
   const type = form[options.typeField] ?? "";
@@ -580,7 +625,7 @@ function RepositoryNameCheckField({ definition, onChange, options = {}, form, er
 }
 
 function BranchField({ definition, required, value, onChange, error, options = {}, form }) {
-  const project = options.project ?? PROJECT;
+  const project = projectOf(options, form);
   const repo = form[options.repoField];
   const environment = options.environmentField ? form[options.environmentField] : undefined;
   const newRole = options.roleField ? form[options.roleField] : undefined;
@@ -692,6 +737,7 @@ function BranchField({ definition, required, value, onChange, error, options = {
 }
 
 function PreviewField({ definition, onChange, options = {}, form, error: blocked }) {
+  const project = projectOf(options, form);
   const repo = form[options.repoField];
   const source = form[options.sourceField];
   const [state, setState] = React.useState({});
@@ -706,7 +752,7 @@ function PreviewField({ definition, onChange, options = {}, form, error: blocked
     setState({ loading: true });
     const timer = setTimeout(() => {
       branching
-        .preview({ project: options.project ?? PROJECT, repo, sourceBranch: source })
+        .preview({ project, repo, sourceBranch: source })
         .then((preview) => {
           if (!cancelled) {
             setState({ preview });
@@ -726,7 +772,7 @@ function PreviewField({ definition, onChange, options = {}, form, error: blocked
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repo, source, options.project]);
+  }, [repo, source, project]);
 
   const { preview, error, loading } = state;
   let body;
@@ -798,6 +844,7 @@ function BranchNameField({ definition, onChange, options = {}, form, error: bloc
   const repo = form[options.repoField];
   const role = form[options.roleField];
   const from = form[options.fromField];
+  const project = projectOf(options, form);
   const parts = BRANCH_NAME_PARTS.map((key) => form[key] ?? "").join("|");
   const [state, setState] = React.useState({});
 
@@ -810,7 +857,7 @@ function BranchNameField({ definition, onChange, options = {}, form, error: bloc
     let cancelled = false;
     setState({ loading: true });
     const timer = setTimeout(() => {
-      const body = { project: options.project ?? PROJECT, repo, role, from };
+      const body = { project, repo, role, from };
       BRANCH_NAME_PARTS.forEach((key) => {
         if (form[key]) body[key] = form[key];
       });
@@ -835,7 +882,7 @@ function BranchNameField({ definition, onChange, options = {}, form, error: bloc
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repo, role, from, parts, options.project]);
+  }, [repo, role, from, parts, project]);
 
   const { result, error, loading } = state;
   let body;
@@ -897,6 +944,8 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
       return <PreviewField definition={definition} onChange={common.onChange} options={options} form={form} error={error} />;
     case "BranchNamePreview":
       return <BranchNameField definition={definition} onChange={common.onChange} options={options} form={form} error={error} />;
+    case "ComponentProject":
+      return <ComponentProjectField {...common} options={options} form={form} />;
     case "RepositoryTarget":
       return <RepositoryTargetField {...common} options={options} form={form} />;
     case "RepositoryNameCheck":
