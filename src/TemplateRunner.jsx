@@ -527,6 +527,68 @@ function RepositoryTargetField({ definition, required, value, onChange, error, o
   );
 }
 
+/**
+ * Dónde se crea algo nuevo («Crear repositorio», Golden Paths): lo da el selector del encabezado, no el formulario.
+ * part = platform | azure-organization | azure-project | github-owner. El campo con `display: true` muestra el destino y
+ * explica qué falta (por ejemplo, elegir un proyecto en el encabezado); los demás no se ven.
+ */
+function WorkspaceTargetField({ definition, value, onChange, options = {} }) {
+  const { workspace } = useWorkspace();
+  const allowed = options.platforms ?? ["azure", "github"];
+  const ok = workspace && allowed.includes(workspace.platform);
+  const wanted = !ok
+    ? undefined
+    : options.part === "platform"
+      ? workspace.platform
+      : options.part === "azure-organization"
+        ? workspace.platform === "azure" ? workspace.organization : undefined
+        : options.part === "azure-project"
+          ? workspace.platform === "azure" ? workspace.project || undefined : undefined
+          : workspace.platform === "github" ? workspace.organization : undefined;
+  React.useEffect(() => {
+    if (wanted !== value) onChange(wanted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted]);
+  if (!options.display) return null;
+  let problem = "";
+  if (!workspace) problem = "No tienes organizaciones en tu alcance; pide al Admin que te asigne una.";
+  else if (!allowed.includes(workspace.platform)) problem = "Esto se crea en Azure DevOps: elige una organización de Azure DevOps en el encabezado.";
+  else if (workspace.platform === "azure" && !workspace.project) problem = "Elige un proyecto en el encabezado (ahora está «Todos los proyectos»).";
+  const where = !workspace
+    ? "—"
+    : workspace.platform === "github"
+      ? `GitHub · ${workspace.organization}`
+      : `Azure DevOps · ${workspace.organization}${workspace.project ? ` · ${workspace.project}` : ""}`;
+  return (
+    <div className={`preview-box ${problem ? "preview-invalid" : ""}`}>
+      <strong>{definition.title}</strong>
+      <p>{where}</p>
+      {problem ? <p className="field-error">{problem}</p> : <p>Para cambiarlo, usa el selector de organización y proyecto del encabezado.</p>}
+    </div>
+  );
+}
+
+/** Línea de negocio: lista de branching.repositories.businessLines; si está vacía, texto libre. */
+function BusinessLineField({ definition, required, value, onChange, error }) {
+  const state = useAsync(() => branching.repositoryRules(), []);
+  const lines = state.data?.config?.businessLines ?? [];
+  if (!state.loading && lines.length === 0) {
+    return (
+      <FieldShell definition={definition} required={required} error={error}>
+        <input value={value ?? ""} onChange={(e) => onChange(e.target.value.trim().toLowerCase() || undefined)} />
+      </FieldShell>
+    );
+  }
+  return (
+    <FieldShell definition={definition} required={required} error={error || state.error} help={state.loading ? "Consultando…" : undefined}>
+      <select value={value ?? ""} disabled={state.loading} onChange={(e) => onChange(e.target.value || undefined)}>
+        <option value="">Selecciona una opción</option>
+        {lines.map((l) => <option key={l} value={l}>{l}</option>)}
+      </select>
+    </FieldShell>
+  );
+}
+
 function RepositoryNameCheckField({ definition, onChange, options = {}, form, error: blocked }) {
   // Azure DevOps (por defecto): el proyecto elegido; GitHub: github:<organización>.
   const github = form[options.platformField] === "github";
@@ -944,6 +1006,10 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
       return <BranchNameField definition={definition} onChange={common.onChange} options={options} form={form} error={error} />;
     case "ComponentProject":
       return <ComponentProjectField {...common} options={options} form={form} />;
+    case "WorkspaceTarget":
+      return <WorkspaceTargetField {...common} options={options} />;
+    case "BusinessLinePicker":
+      return <BusinessLineField {...common} />;
     case "RepositoryTarget":
       return <RepositoryTargetField {...common} options={options} form={form} />;
     case "RepositoryNameCheck":
