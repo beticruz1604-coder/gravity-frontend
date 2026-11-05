@@ -442,12 +442,58 @@ function RepositoryNameField({ definition, required, value, onChange, error, opt
  * «Crear repositorio»: arma el nombre con la línea de negocio, la aplicación y el tipo, y pregunta a GRAVITY si cumple las reglas,
  * si ya existe y si el proyecto es privado. Mientras no se pueda crear, el campo queda vacío y el paso no avanza.
  */
+/**
+ * «Crear repositorio»: lista para elegir dónde se crea. kind = azure-organization (organizaciones con credenciales),
+ * azure-project (proyectos de la organización elegida en organizationField) o github-owner (cuentas del token de GitHub).
+ * Si solo hay una opción, se elige sola.
+ */
+function RepositoryTargetField({ definition, required, value, onChange, error, options = {}, form }) {
+  const state = useAsync(() => branching.repositoryTargets(), []);
+  const targets = state.data;
+  let choices = [];
+  let problem = "";
+  if (targets) {
+    if (options.kind === "github-owner") {
+      choices = targets.github?.owners ?? [];
+      problem = targets.github?.error ?? "";
+    } else if (options.kind === "azure-project") {
+      const org = (targets.azure?.organizations ?? []).find((o) => o.name === form[options.organizationField]);
+      choices = (org?.projects ?? []).map((p) => p.name);
+      problem = targets.azure?.error ?? "";
+    } else {
+      choices = (targets.azure?.organizations ?? []).map((o) => o.name);
+      problem = targets.azure?.error ?? "";
+    }
+  }
+  const key = choices.join("|");
+  React.useEffect(() => {
+    if (choices.length === 1 && value !== choices[0]) onChange(choices[0]);
+    else if (value && choices.length > 0 && !choices.includes(value)) onChange(undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const help = state.loading
+    ? "Consultando…"
+    : state.error || problem || (targets && choices.length === 0 ? "No hay opciones disponibles con las credenciales de GRAVITY." : undefined);
+  return (
+    <FieldShell definition={definition} required={required} error={error} help={help}>
+      <select value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)} disabled={state.loading}>
+        {(value === undefined || !required) && <option value="">{required ? "Selecciona una opción" : "—"}</option>}
+        {choices.map((c) => (
+          <option key={c} value={c}>{c}</option>
+        ))}
+      </select>
+    </FieldShell>
+  );
+}
+
 function RepositoryNameCheckField({ definition, onChange, options = {}, form, error: blocked }) {
-  // Azure DevOps (por defecto): el proyecto de la plantilla; GitHub: github:<organización>.
+  // Azure DevOps (por defecto): el proyecto elegido; GitHub: github:<organización>.
   const github = form[options.platformField] === "github";
   const organization = (form[options.organizationField] ?? "").trim();
-  const project = github ? (organization ? `github:${organization}` : "") : (options.project ?? PROJECT);
-  const where = github ? `la organización ${organization} de GitHub` : `el proyecto ${project} de Azure DevOps`;
+  const azureProject = form[options.projectField] ?? options.project ?? "";
+  const azureOrganization = form[options.azureOrganizationField] ?? "";
+  const project = github ? (organization ? `github:${organization}` : "") : azureProject;
+  const where = github ? `la organización ${organization} de GitHub` : `el proyecto ${project}${azureOrganization ? ` de ${azureOrganization}` : ""} en Azure DevOps`;
   const line = (form[options.lineField] ?? "").trim();
   const app = (form[options.appField] ?? "").trim();
   const type = form[options.typeField] ?? "";
@@ -851,6 +897,8 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
       return <PreviewField definition={definition} onChange={common.onChange} options={options} form={form} error={error} />;
     case "BranchNamePreview":
       return <BranchNameField definition={definition} onChange={common.onChange} options={options} form={form} error={error} />;
+    case "RepositoryTarget":
+      return <RepositoryTargetField {...common} options={options} form={form} />;
     case "RepositoryNameCheck":
       return <RepositoryNameCheckField definition={definition} onChange={common.onChange} options={options} form={form} error={error} />;
     default:
