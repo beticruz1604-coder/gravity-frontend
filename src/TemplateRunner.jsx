@@ -443,7 +443,11 @@ function RepositoryNameField({ definition, required, value, onChange, error, opt
  * si ya existe y si el proyecto es privado. Mientras no se pueda crear, el campo queda vacío y el paso no avanza.
  */
 function RepositoryNameCheckField({ definition, onChange, options = {}, form, error: blocked }) {
-  const project = options.project ?? PROJECT;
+  // Azure DevOps (por defecto): el proyecto de la plantilla; GitHub: github:<organización>.
+  const github = form[options.platformField] === "github";
+  const organization = (form[options.organizationField] ?? "").trim();
+  const project = github ? (organization ? `github:${organization}` : "") : (options.project ?? PROJECT);
+  const where = github ? `la organización ${organization} de GitHub` : `el proyecto ${project} de Azure DevOps`;
   const line = (form[options.lineField] ?? "").trim();
   const app = (form[options.appField] ?? "").trim();
   const type = form[options.typeField] ?? "";
@@ -452,7 +456,7 @@ function RepositoryNameCheckField({ definition, onChange, options = {}, form, er
 
   React.useEffect(() => {
     setState({});
-    if (!line || !app || !type) {
+    if (!line || !app || !type || !project) {
       onChange(undefined);
       return undefined;
     }
@@ -496,9 +500,9 @@ function RepositoryNameCheckField({ definition, onChange, options = {}, form, er
         <p>
           {result.valid ? "Se creará el repositorio " : "No se puede crear el repositorio "}
           <code>{result.name}</code>
-          {result.valid ? ` en ${project}.` : "."}
+          {result.valid ? ` en ${where}.` : "."}
         </p>
-        {result.valid && <p>Cumple las reglas, el nombre está libre y el proyecto es privado.</p>}
+        {result.valid && <p>{github ? "Cumple las reglas, el nombre está libre y se creará privado." : "Cumple las reglas, el nombre está libre y el proyecto es privado."}</p>}
         {result.errors.map((message) => (
           <p key={message} className="field-error">{message}</p>
         ))}
