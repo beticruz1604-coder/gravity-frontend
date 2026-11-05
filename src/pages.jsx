@@ -1574,7 +1574,11 @@ function ProjectsPanel({ busy, run }) {
   const { targets } = useWorkspace();
   const loader = useData(() => access.projects());
   const profiles = loader.data?.projects ?? [];
-  const all = (targets?.azure?.organizations ?? []).flatMap((o) => o.projects.map((p) => `${o.name}:${p.name}`));
+  // Azure DevOps: una ficha por proyecto. GitHub no tiene proyectos: una ficha por organización (github:<organización>).
+  const all = [
+    ...(targets?.azure?.organizations ?? []).flatMap((o) => o.projects.map((p) => `${o.name}:${p.name}`)),
+    ...(targets?.github?.owners ?? []).map((o) => `github:${o}`)
+  ];
   const keys = [...new Set([...all, ...profiles.map((p) => p.project)])].sort();
   const [editing, setEditing] = React.useState(null);
   const [draft, setDraft] = React.useState({ division: "", domains: "" });
@@ -1613,7 +1617,11 @@ function ProjectsPanel({ busy, run }) {
               const isEditing = editing === key;
               return (
                 <tr key={key}>
-                  <td><strong>{key.split(":")[1]}</strong><br /><small>{key.split(":")[0]}</small></td>
+                  <td>
+                    <strong>{key.split(":")[1]}</strong>
+                    <br />
+                    <small>{key.startsWith("github:") ? "GitHub (organización)" : `Azure DevOps · ${key.split(":")[0]}`}</small>
+                  </td>
                   <td>
                     {isEditing ? (
                       <select className="inline-input" value={draft.division} onChange={(e) => setDraft({ ...draft, division: e.target.value })}>

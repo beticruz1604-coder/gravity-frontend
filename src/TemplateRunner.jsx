@@ -310,7 +310,7 @@ function ProductField({ definition, required, value, onChange, error }) {
   // Con ficha de proyecto: solo los productos del proyecto (proyecto-división); el alta queda en ese proyecto.
   const project = useProjectProfile();
   const byProject = Boolean(project.profile);
-  const state = useAsync(() => (project.loading ? Promise.resolve(null) : byProject ? Promise.resolve({ products: project.profile.products }) : access.products()), [project.loading, project.key]);
+  const state = { loading: project.loading, data: byProject ? { products: project.profile.products } : null, error: project.error };
   const [added, setAdded] = React.useState([]);
   const [adding, setAdding] = React.useState(false);
   const [draft, setDraft] = React.useState("");
@@ -325,7 +325,7 @@ function ProductField({ definition, required, value, onChange, error }) {
     setSaving(true);
     setSaveError("");
     try {
-      const { product } = byProject ? await access.addProjectProduct(project.key, draft) : await access.addProduct(draft);
+      const { product } = await access.addProjectProduct(project.key, draft);
       setAdded((current) => [...current, product.name]);
       onChange(product.name);
       setAdding(false);
@@ -336,6 +336,8 @@ function ProductField({ definition, required, value, onChange, error }) {
       setSaving(false);
     }
   };
+
+  if (!project.loading && !byProject) return <NoProfile title={definition.title} project={project} />;
 
   return (
     <FieldShell
@@ -578,45 +580,51 @@ const DIVISION_LABEL = { "group:default/cadena-de-suministro": "Cadena de Sumini
  * División («Crear repositorio», Golden Paths): la de la ficha del proyecto del encabezado; solo se muestra. Sin ficha (por
  * ejemplo, un proyecto nuevo), se elige de la lista hasta que el Admin le asigne su división.
  */
-function ProjectDivisionField({ definition, required, value, onChange, error }) {
+function ProjectDivisionField({ definition, value, onChange }) {
   const project = useProjectProfile();
   const fixed = project.profile?.division;
   React.useEffect(() => {
-    if (fixed && value !== fixed) onChange(fixed);
+    if (fixed !== value) onChange(fixed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fixed]);
   if (project.loading) return <div className="preview-box"><strong>{definition.title}</strong><p>Consultando la ficha del proyecto…</p></div>;
-  if (fixed) {
-    return (
-      <div className="preview-box">
-        <strong>{definition.title}</strong>
-        <p>{DIVISION_LABEL[fixed] ?? fixed.replace(/^group:default\//, "")}</p>
-        <p>Es la división del proyecto {project.key?.split(":")[1] ?? project.key}.</p>
-      </div>
-    );
-  }
+  if (!fixed) return <NoProfile title={definition.title} project={project} />;
   return (
-    <FieldShell definition={definition} required={required} error={error} help="Este proyecto no tiene ficha: el Admin puede asignarle su división en Usuarios › Proyectos.">
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)}>
-        <option value="">Selecciona una opción</option>
-        {Object.entries(DIVISION_LABEL).map(([ref, label]) => <option key={ref} value={ref}>{label}</option>)}
-      </select>
-    </FieldShell>
+    <div className="preview-box">
+      <strong>{definition.title}</strong>
+      <p>{DIVISION_LABEL[fixed] ?? fixed.replace(/^group:default\//, "")}</p>
+      <p>Es la división del proyecto {project.key?.split(":").pop() ?? project.key}.</p>
+    </div>
   );
 }
 
-/** Dominio / Torre: los de la ficha del proyecto del encabezado; sin ficha, la lista general. */
+/** Aviso de proyecto sin ficha: no se ofrece nada de otros proyectos y el paso no avanza. */
+function NoProfile({ title, project }) {
+  const name = project.key ? project.key.replace(/^github:/, "GitHub · ").split(":").pop() : "";
+  return (
+    <div className="preview-box preview-invalid">
+      <strong>{title}</strong>
+      <p className="field-error">
+        {project.key
+          ? `El proyecto ${name} no tiene ficha: el Admin debe asignarle su división, dominios y productos en Usuarios › Proyectos.`
+          : "Elige un proyecto en el encabezado."}
+      </p>
+    </div>
+  );
+}
+
+/** Dominio / Torre: solo los de la ficha del proyecto del encabezado. */
 function ProjectDomainField({ definition, required, value, onChange, error }) {
   const project = useProjectProfile();
-  const general = useAsync(() => access.classification?.() ?? Promise.resolve(null), []);
-  const domains = project.profile?.domains?.length ? project.profile.domains : (general.data?.domains ?? ["OMS", "TMS", "WMS", "Digital"]);
+  const domains = project.profile?.domains ?? [];
   React.useEffect(() => {
-    if (value && domains.length && !domains.includes(value)) onChange(undefined);
+    if (value && !domains.includes(value)) onChange(undefined);
     else if (!value && domains.length === 1) onChange(domains[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [domains.join("|")]);
+  if (!project.loading && !project.profile) return <NoProfile title={definition.title} project={project} />;
   return (
-    <FieldShell definition={definition} required={required} error={error} help={project.loading ? "Consultando la ficha del proyecto…" : undefined}>
+    <FieldShell definition={definition} required={required} error={error} help={project.loading ? "Consultando la ficha del proyecto…" : domains.length === 0 ? "El proyecto no tiene dominios en su ficha." : undefined}>
       <select value={value ?? ""} disabled={project.loading} onChange={(e) => onChange(e.target.value || undefined)}>
         <option value="">Selecciona una opción</option>
         {domains.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -809,7 +817,7 @@ function RepositoryNameCheckField({ definition, onChange, options = {}, form, er
   const app = (form[options.appField] ?? "").trim();
   const type = form[options.typeField] ?? "";
   const [state, setState] = React.useState({});
-  const rules = useAsync(() => branching.repositoryRules(), []);
+  const rules = useAsync(() => branching.repositoryRules(github ? "github" : "azure"), [github]);
 
   React.useEffect(() => {
     setState({});
@@ -1230,6 +1238,16 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
       break;
   }
 
+  if (definition["ui:field"]) {
+    // Campo que esta versión de GRAVITY no conoce: casi siempre es una versión anterior en el navegador.
+    return (
+      <div className="preview-box preview-invalid">
+        <strong>{definition.title ?? name}</strong>
+        <p className="field-error">Esta pantalla es de una versión anterior de GRAVITY. Recarga la página (Ctrl + Shift + R) para continuar.</p>
+      </div>
+    );
+  }
+
   if (definition.type === "boolean") {
     return (
       <label className="check-field">
@@ -1519,7 +1537,11 @@ export function TaskViewer({ taskId, onClose, onFinished }) {
     }
   }, [events.length]);
 
-  const steps = task?.spec?.steps ?? [];
+  // En «Crear repositorio» no se muestran los pasos de la otra plataforma (Azure DevOps o GitHub).
+  const platform = task?.spec?.parameters?.platform;
+  const steps = (task?.spec?.steps ?? []).filter(
+    (step) => !platform || !((platform === "github" && step.id.endsWith("-azure")) || (platform !== "github" && step.id.endsWith("-github")))
+  );
   const stepStatus = {};
   for (const event of events) {
     if (event.body?.stepId) {
