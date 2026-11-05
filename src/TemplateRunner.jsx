@@ -26,6 +26,7 @@ import {
   repoOf
 } from "./backstage";
 import { TASK_STATUS_TEXT, TaskStatus } from "./status";
+import { componentProject, useWorkspace, workspaceComponents } from "./workspace";
 
 /*
  * Ejecutor de plantillas de Backstage dentro de GRAVITY.
@@ -236,21 +237,6 @@ function projectOf(options = {}, form = {}) {
   return form[options.projectField] || options.project || PROJECT;
 }
 
-/**
- * Proyecto de Azure DevOps de un componente del catálogo: <organización>:<proyecto> si la ficha dice su organización
- * (dev.azure.com/host-org), o solo el proyecto (organización predeterminada). GitHub: github:<organización>.
- */
-export function componentProject(entity) {
-  const slug = entity?.metadata?.annotations?.["github.com/project-slug"];
-  if (slug) return `github:${slug.split("/")[0]}`;
-  const projectRepo = entity?.metadata?.annotations?.["dev.azure.com/project-repo"];
-  if (!projectRepo) return undefined;
-  const project = projectRepo.split("/")[0];
-  const hostOrg = entity?.metadata?.annotations?.["dev.azure.com/host-org"];
-  const org = hostOrg ? hostOrg.split("/").pop() : "";
-  return org ? `${org}:${project}` : project;
-}
-
 /** Organización y proyecto del componente elegido; se calculan solos y solo se muestran. */
 function ComponentProjectField({ definition, value, onChange, options = {}, form }) {
   const state = useAsync(() => catalog.components(), []);
@@ -275,7 +261,8 @@ function ComponentProjectField({ definition, value, onChange, options = {}, form
 }
 
 function ComponentField({ definition, required, value, onChange, error }) {
-  const state = useAsync(() => catalog.components(), []);
+  // Solo los componentes de la organización y el proyecto elegidos en el encabezado.
+  const state = useAsync(() => workspaceComponents(), []);
   const items = (state.data ?? []).filter(isDeployable);
 
   return (
@@ -430,8 +417,10 @@ function OwnerField({ definition, required, value, onChange, error }) {
   );
 }
 
-function RepositoryNameField({ definition, required, value, onChange, error, options, onBlock }) {
-  const project = options?.project ?? PROJECT;
+function RepositoryNameField({ definition, required, value, onChange, error, options, onBlock, form = {} }) {
+  const org = form[options?.azureOrganizationField];
+  const chosen = form[options?.projectField];
+  const project = chosen ? (org ? `${org}:${chosen}` : chosen) : (options?.project ?? PROJECT);
   const [exists, setExists] = React.useState(false);
   const [checking, setChecking] = React.useState(false);
   const valid = value && new RegExp(definition.pattern ?? ".*").test(value);
@@ -509,8 +498,17 @@ function RepositoryTargetField({ definition, required, value, onChange, error, o
     }
   }
   const key = choices.join("|");
+  const { workspace } = useWorkspace();
+  // Lo elegido en el encabezado, si está entre las opciones.
+  const preferred =
+    options.kind === "github-owner"
+      ? workspace?.platform === "github" ? workspace.organization : undefined
+      : options.kind === "azure-project"
+        ? workspace?.platform === "azure" && workspace.organization === form[options.organizationField] ? workspace.project : undefined
+        : workspace?.platform === "azure" ? workspace.organization : undefined;
   React.useEffect(() => {
-    if (choices.length === 1 && value !== choices[0]) onChange(choices[0]);
+    if (!value && preferred && choices.includes(preferred)) onChange(preferred);
+    else if (choices.length === 1 && value !== choices[0]) onChange(choices[0]);
     else if (value && choices.length > 0 && !choices.includes(value)) onChange(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
@@ -937,7 +935,7 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
     case "ProductPicker":
       return <ProductField {...common} />;
     case "RepositoryName":
-      return <RepositoryNameField {...common} options={options} onBlock={(message) => onBlock(name, message)} />;
+      return <RepositoryNameField {...common} options={options} form={form} onBlock={(message) => onBlock(name, message)} />;
     case "BranchPicker":
       return <BranchField {...common} options={options} form={form} />;
     case "PullRequestPreview":

@@ -3408,3 +3408,52 @@ td.wrap {
 .repository-rules small {
   color: #7c8a9e;
 }
+
+/* Selector global de organización y proyecto (encabezado). */
+.workspace {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+}
+.workspace-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid rgba(120, 150, 200, 0.25);
+  border-radius: 8px;
+  background: rgba(15, 25, 45, 0.6);
+  color: #dfe7f5;
+}
+.workspace-select select {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  max-width: 220px;
+  appearance: none;
+  cursor: pointer;
+}
+.workspace-select select option,
+.workspace-select select optgroup {
+  background: #0f1a2e;
+  color: #dfe7f5;
+}
+.workspace-empty {
+  color: #8a97ab;
+  font-size: 12px;
+}
+
+/* Alcances (sección Usuarios). */
+.scope-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.scope-org {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}

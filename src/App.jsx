@@ -39,7 +39,6 @@ import "./App.css";
 
 import {
   access as accessApi,
-  branching,
   catalog,
   scaffolder,
   formatDate
@@ -49,6 +48,7 @@ import {
   REPOSITORY_TAG,
   TaskViewer
 } from "./TemplateRunner";
+import { WorkspaceProvider, WorkspaceSelector, useWorkspace, workspaceAgentPools, workspaceKey, workspacePipelines } from "./workspace";
 import {
   PipelineStatus,
   TaskStatus
@@ -1493,7 +1493,7 @@ function PipelineEnginePage({ access }) {
 
       try {
         const response =
-          await branching.pipelines();
+          await workspacePipelines();
 
         if (!response) {
           setPipelines([]);
@@ -1984,6 +1984,12 @@ function PipelineEnginePage({ access }) {
 
 /*POOL DE AGENTES*/
 
+/** Contenido de la sección: se vuelve a montar al cambiar la organización o el proyecto del encabezado. */
+function WorkspaceContent({ className, children }) {
+  const { workspace } = useWorkspace();
+  return <div key={workspaceKey(workspace)} className={className}>{children}</div>;
+}
+
 function AgentPoolsPage() {
   const [pools, setPools] =
     React.useState([]);
@@ -2004,7 +2010,7 @@ function AgentPoolsPage() {
 
       try {
         const response =
-          await branching.agentPools();
+          await workspaceAgentPools();
 
         if (!response) {
           setPools([]);
@@ -2362,6 +2368,7 @@ function App() {
 
   return (
     <NavContext.Provider value={navValue}>
+    <WorkspaceProvider enabled={showPages}>
     <div className="app">
       <NewVersionBanner />
       <Sidebar
@@ -2393,23 +2400,8 @@ function App() {
           <div className="header-right">
             <GlobalSearch />
 
-            <div className="organization">
-              <small>
-                AZURE ORGANIZATION
-              </small>
-
-              <button>
-                <GitBranch
-                  size={13}
-                />
-
-                Coppel-Retail
-
-                <ChevronDown
-                  size={14}
-                />
-              </button>
-            </div>
+            {/* Organización y proyecto de Azure DevOps (o cuenta de GitHub) de la persona, según su alcance. */}
+            {showPages && <WorkspaceSelector />}
 
             <div className="online-status">
               <span className="online-dot" />
@@ -2425,7 +2417,7 @@ function App() {
           </div>
         </header>
 
-        <div className="dashboard-content">
+        <WorkspaceContent className="dashboard-content">
           {access.loading ? null : blocked ? <AccessGate access={access} /> : null}
 
           {entityRef && !blocked && (
@@ -2525,9 +2517,10 @@ function App() {
               }
             />
           )}
-        </div>
+        </WorkspaceContent>
       </main>
     </div>
+    </WorkspaceProvider>
     </NavContext.Provider>
   );
 }

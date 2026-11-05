@@ -26,6 +26,7 @@ import {
   isDeployable,
   repoOf
 } from "./backstage";
+import { useWorkspace, workspaceAgentPools, workspaceComponents, workspacePipelines } from "./workspace";
 import { TemplateButton } from "./TemplateRunner";
 import { useNav } from "./nav";
 import { PipelineStatus, Percent } from "./status";
@@ -495,7 +496,13 @@ export function HomologationPage() {
     });
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("Todos");
-  const loader = useData(() => homologation.items(), { interval: 60000 });
+  // Los componentes se limitan a la organización y el proyecto elegidos; la infraestructura se muestra completa.
+  const loader = useData(async () => {
+    const [data, components] = await Promise.all([homologation.items(), workspaceComponents().catch(() => null)]);
+    if (!components) return data;
+    const names = new Set(components.map((c) => c.metadata.name));
+    return { ...data, items: (data.items ?? []).filter((item) => item.category !== "componente" || names.has(String(item.id ?? "").split(":")[1])) };
+  }, { interval: 60000 });
   const requirements = useData(() => homologation.requirements(), { interval: 300000 });
 
   const items = loader.data?.items ?? [];
@@ -652,7 +659,7 @@ export function RepositoriesPage() {
   const { openEntity } = useNav();
   const loader = useData(async () => {
     const [components, groups, rules, parity, baseline] = await Promise.all([
-      catalog.components(),
+      workspaceComponents(),
       catalog.groups().catch(() => []),
       branching.rules(),
       homologation.components().catch(() => ({ items: [] })),
@@ -750,7 +757,7 @@ export function RepositoriesPage() {
 /* --------------------------------------------------------------- Pipelines */
 
 export function PipelinesPage() {
-  const loader = useData(() => branching.pipelines(), { interval: 30000 });
+  const loader = useData(() => workspacePipelines(), { interval: 30000 });
   const [search, setSearch] = React.useState("");
   const pipelines = (loader.data?.pipelines ?? []).filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
   const all = loader.data?.pipelines ?? [];
@@ -826,10 +833,12 @@ const MANUAL_DEPLOY_ENABLED = false;
 
 export function ReleasesPage({ tabs }) {
   const loader = useData(async () => {
-    const [parity, components] = await Promise.all([homologation.components(), catalog.components().catch(() => [])]);
+    const [parity, components] = await Promise.all([homologation.components(), workspaceComponents().catch(() => [])]);
     // El plugin de homologación devuelve el identificador del componente; se muestra su nombre visible si lo tiene.
     const titles = Object.fromEntries(components.filter((c) => c.metadata.title).map((c) => [c.metadata.name, c.metadata.title]));
-    return { ...parity, items: parity.items.map((item) => ({ ...item, label: titles[item.component] ?? item.component })) };
+    // Solo los componentes de la organización y el proyecto elegidos en el encabezado.
+    const names = new Set(components.map((c) => c.metadata.name));
+    return { ...parity, items: parity.items.filter((item) => names.has(item.component)).map((item) => ({ ...item, label: titles[item.component] ?? item.component })) };
   }, { interval: 60000 });
   const environments = loader.data?.environments ?? ["develop", "qa", "staging", "produccion"];
   const items = loader.data?.items ?? [];
@@ -1223,8 +1232,8 @@ export function SummaryPage({ onNavigate }) {
     const settle = (promise) => promise.then((value) => ({ value }), (error) => ({ error: error.message }));
     const [homologationItems, pipelines, pools, tasks, parity] = await Promise.all([
       settle(homologation.items()),
-      settle(branching.pipelines()),
-      settle(branching.agentPools()),
+      settle(workspacePipelines()),
+      settle(workspaceAgentPools()),
       settle(scaffolder.tasks(10)),
       settle(homologation.components())
     ]);
@@ -1388,6 +1397,173 @@ function RoleChecks({ roles, value, onChange }) {
   );
 }
 
+function ScopeChecks({ scopes, value, onChange }) {
+  if (!scopes.length) return <small>Sin alcances: crea uno abajo.</small>;
+  return (
+    <div className="role-checks">
+      {scopes.map((scope) => (
+        <label key={scope.id} title={scopeSummary(scope)}>
+          <input
+            type="checkbox"
+            checked={value.includes(scope.id)}
+            onChange={(e) => onChange(e.target.checked ? [...value, scope.id] : value.filter((id) => id !== scope.id))}
+          />
+          {scope.name}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** «Coppel-Retail: Cds.Inventarios, Cds.Surtido · GitHub: coppel-digital» */
+function scopeSummary(scope) {
+  const azure = (scope.azure ?? []).map((a) => `${a.organization}: ${a.projects.includes("*") ? "todos los proyectos" : a.projects.join(", ")}`);
+  const github = (scope.github ?? []).length ? [`GitHub: ${scope.github.join(", ")}`] : [];
+  return [...azure, ...github].join(" · ") || "—";
+}
+
+/**
+ * Alcances: qué organizaciones y proyectos de Azure DevOps, y qué organizaciones de GitHub, ve y usa cada grupo de personas.
+ * Las opciones salen de las organizaciones que GRAVITY tiene configuradas.
+ */
+function ScopesPanel({ scopes, requireScope, busy, run }) {
+  const { targets } = useWorkspace();
+  const orgs = targets?.azure?.organizations ?? [];
+  const owners = targets?.github?.owners ?? [];
+  const empty = { id: "", name: "", azure: {}, github: [] };
+  const [draft, setDraft] = React.useState(null);
+  const startNew = () => setDraft({ ...empty, isNew: true });
+  const startEdit = (scope) =>
+    setDraft({
+      id: scope.id,
+      name: scope.name,
+      azure: Object.fromEntries(scope.azure.map((a) => [a.organization, a.projects])),
+      github: scope.github,
+      isNew: false
+    });
+  const toggleOrg = (org, on) => setDraft((d) => {
+    const azure = { ...d.azure };
+    if (on) azure[org] = ["*"];
+    else delete azure[org];
+    return { ...d, azure };
+  });
+  const toggleProject = (org, project, on) => setDraft((d) => {
+    const current = (d.azure[org] ?? []).filter((p) => p !== "*");
+    const next = on ? [...current, project] : current.filter((p) => p !== project);
+    return { ...d, azure: { ...d.azure, [org]: next } };
+  });
+  const save = () =>
+    run(async () => {
+      await access.saveScope(draft.id.trim(), {
+        name: draft.name.trim(),
+        azure: Object.entries(draft.azure).map(([organization, projects]) => ({ organization, projects })),
+        github: draft.github
+      });
+      setDraft(null);
+    });
+  const remove = (scope) => {
+    if (window.confirm(`¿Borrar el alcance ${scope.name}?`)) run(() => access.deleteScope(scope.id));
+  };
+
+  return (
+    <div className="module-panel panel-spaced">
+      <div className="pipeline-toolbar">
+        <div className="panel-title">
+          <strong>Alcances</strong>
+          <small>
+            Organizaciones y proyectos que ve y usa cada grupo. {requireScope
+              ? "Quien no tiene alcance no ve ninguna organización."
+              : "Por ahora, quien no tiene alcance ve todo."} Admin siempre ve todo.
+          </small>
+        </div>
+        {!draft && <button type="button" className="create-button" onClick={startNew}>Nuevo alcance</button>}
+      </div>
+
+      {draft && (
+        <div className="scope-editor">
+          <div className="user-form">
+            <label>
+              Identificador
+              <input type="text" value={draft.id} disabled={!draft.isNew} onChange={(e) => setDraft({ ...draft, id: e.target.value.toLowerCase() })} placeholder="scm-cds" />
+            </label>
+            <label>
+              Nombre
+              <input type="text" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="SCM Cadena de Suministro" />
+            </label>
+          </div>
+          <fieldset className="user-form-roles">
+            <legend>Azure DevOps</legend>
+            {orgs.length === 0 && <small>No hay organizaciones configuradas.</small>}
+            {orgs.map((o) => {
+              const chosen = draft.azure[o.name];
+              const all = chosen?.includes("*");
+              return (
+                <div key={o.name} className="scope-org">
+                  <label>
+                    <input type="checkbox" checked={Boolean(chosen)} onChange={(e) => toggleOrg(o.name, e.target.checked)} />
+                    <strong>{o.name}</strong>
+                  </label>
+                  {chosen && (
+                    <div className="role-checks">
+                      <label>
+                        <input type="checkbox" checked={all} onChange={(e) => setDraft((d) => ({ ...d, azure: { ...d.azure, [o.name]: e.target.checked ? ["*"] : [] } }))} />
+                        Todos los proyectos
+                      </label>
+                      {!all && o.projects.map((p) => (
+                        <label key={p.name}>
+                          <input type="checkbox" checked={chosen.includes(p.name)} onChange={(e) => toggleProject(o.name, p.name, e.target.checked)} />
+                          {p.name}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </fieldset>
+          <fieldset className="user-form-roles">
+            <legend>GitHub</legend>
+            {owners.length === 0 ? <small>No hay cuentas de GitHub disponibles.</small> : (
+              <div className="role-checks">
+                {owners.map((o) => (
+                  <label key={o}>
+                    <input type="checkbox" checked={draft.github.includes(o)} onChange={(e) => setDraft((d) => ({ ...d, github: e.target.checked ? [...d.github, o] : d.github.filter((g) => g !== o) }))} />
+                    {o}
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
+          <div className="user-form-actions">
+            <button type="button" className="create-button" disabled={busy || !draft.id || !draft.name} onClick={save}>Guardar alcance</button>
+            <button type="button" className="link-button" onClick={() => setDraft(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      <div className="table-wrapper">
+        <table className="pool-table">
+          <thead><tr><th>Alcance</th><th>Organizaciones y proyectos</th><th>Personas</th><th>Acciones</th></tr></thead>
+          <tbody>
+            {scopes.length === 0 && <EmptyRow colSpan={4}>Sin alcances.</EmptyRow>}
+            {scopes.map((scope) => (
+              <tr key={scope.id}>
+                <td><strong>{scope.name}</strong><br /><small>{scope.id}</small></td>
+                <td>{scopeSummary(scope)}</td>
+                <td>{scope.members?.length ? scope.members.join(", ") : "—"}</td>
+                <td className="user-actions">
+                  <button type="button" className="link-button" onClick={() => startEdit(scope)}>Editar</button>
+                  <button type="button" className="link-button danger-link" disabled={busy} onClick={() => remove(scope)}>Borrar</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /** Resultado de un alta o un restablecimiento: aviso de correo enviado o la contraseña temporal, que se muestra una sola vez. */
 function TemporaryPassword({ username, password, email, emailError, onClose }) {
   const [copied, setCopied] = React.useState(false);
@@ -1419,13 +1595,16 @@ function TemporaryPassword({ username, password, email, emailError, onClose }) {
 
 export function UsersPage() {
   const loader = useData(async () => {
-    const [roles, users] = await Promise.all([access.roles(), access.users()]);
-    return { roles, users: users.users ?? [] };
+    const [roles, users, scopes] = await Promise.all([access.roles(), access.users(), access.scopes().catch(() => ({ scopes: [] }))]);
+    return { roles, users: users.users ?? [], scopes: scopes.scopes ?? [], requireScope: Boolean(scopes.requireScope) };
   });
   const roles = loader.data?.roles?.roles ?? [];
   const sections = loader.data?.roles?.sections ?? [];
   const emailEnabled = Boolean(loader.data?.roles?.emailEnabled);
   const users = loader.data?.users ?? [];
+  const scopes = loader.data?.scopes ?? [];
+  const [newScopes, setNewScopes] = React.useState([]);
+  const [editScopes, setEditScopes] = React.useState([]);
 
   const [username, setUsername] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -1456,17 +1635,18 @@ export function UsersPage() {
   const create = (event) => {
     event.preventDefault();
     run(async () => {
-      const result = await access.createUser({ username: username.trim().toLowerCase(), displayName: displayName.trim(), email: email.trim(), roles: newRoles });
+      const result = await access.createUser({ username: username.trim().toLowerCase(), displayName: displayName.trim(), email: email.trim(), roles: newRoles, scopes: newScopes });
       setIssued({ username: result.user.username, password: result.temporaryPassword, email: result.email, emailError: result.emailError });
       setUsername("");
       setEmail("");
       setDisplayName("");
       setNewRoles([]);
+      setNewScopes([]);
     });
   };
   const saveRoles = (user) =>
     run(async () => {
-      await access.updateUser(user.username, { roles: editRoles, email: editEmail.trim() });
+      await access.updateUser(user.username, { roles: editRoles, email: editEmail.trim(), scopes: editScopes });
       setEditing(null);
     });
   const toggleActive = (user) => run(() => access.updateUser(user.username, { active: !user.active }));
@@ -1515,6 +1695,10 @@ export function UsersPage() {
             <legend>Roles</legend>
             <RoleChecks roles={roles} value={newRoles} onChange={setNewRoles} />
           </fieldset>
+          <fieldset className="user-form-roles">
+            <legend>Alcances</legend>
+            <ScopeChecks scopes={scopes} value={newScopes} onChange={setNewScopes} />
+          </fieldset>
           <div className="user-form-actions">
             <button type="submit" className="create-button" disabled={busy || !validName || newRoles.length === 0}>Crear usuario</button>
           </div>
@@ -1530,9 +1714,9 @@ export function UsersPage() {
         <div className="panel-title"><strong>Personas</strong><small>Roles y estado de cada cuenta</small></div>
         <div className="table-wrapper">
           <table className="pool-table">
-            <thead><tr><th>Usuario</th><th>Nombre</th><th>Correo</th><th>Roles</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Usuario</th><th>Nombre</th><th>Correo</th><th>Roles</th><th>Alcances</th><th>Estado</th><th>Acciones</th></tr></thead>
             <tbody>
-              {users.length === 0 && <EmptyRow colSpan={6} loading={loader.loading}>Sin usuarios.</EmptyRow>}
+              {users.length === 0 && <EmptyRow colSpan={7} loading={loader.loading}>Sin usuarios.</EmptyRow>}
               {users.map((user) => (
                 <tr key={user.entityRef}>
                   <td>{user.username ?? user.entityRef.replace(/^user:default\//, "")}</td>
@@ -1551,6 +1735,19 @@ export function UsersPage() {
                       user.roles.map((role) => role.name).join(", ")
                     ) : (
                       "Sin rol"
+                    )}
+                  </td>
+                  <td>
+                    {editing === user.username ? (
+                      <ScopeChecks scopes={scopes} value={editScopes} onChange={setEditScopes} />
+                    ) : user.admin ? (
+                      "Todo (Admin)"
+                    ) : !user.managed ? (
+                      "—"
+                    ) : user.scopes?.length ? (
+                      user.scopes.map((id) => scopes.find((s) => s.id === id)?.name ?? id).join(", ")
+                    ) : (
+                      loader.data?.requireScope ? "Ninguno" : "Todo (sin alcance)"
                     )}
                   </td>
                   <td>
@@ -1582,6 +1779,7 @@ export function UsersPage() {
                               setEditing(user.username);
                               setEditRoles(user.roles.map((role) => role.id));
                               setEditEmail(user.email ?? "");
+                              setEditScopes(user.scopes ?? []);
                             }}
                           >
                             Editar
@@ -1604,6 +1802,8 @@ export function UsersPage() {
           </table>
         </div>
       </div>
+
+      <ScopesPanel scopes={scopes} requireScope={Boolean(loader.data?.requireScope)} busy={busy} run={run} />
 
       <div className="module-panel panel-spaced">
         <div className="panel-title"><strong>Roles y secciones</strong><small>Qué ve cada rol en GRAVITY</small></div>

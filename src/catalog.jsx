@@ -1,4 +1,5 @@
 import React from "react";
+import { componentProject, inActiveWorkspace } from "./workspace";
 import { dump, load } from "js-yaml";
 import DOMPurify from "dompurify";
 import {
@@ -37,17 +38,17 @@ let entitiesCache;
 
 /** Entidades del catálogo (una sola consulta compartida entre pantallas). */
 export function useEntities() {
-  const [state, setState] = React.useState({ loading: !entitiesCache, data: entitiesCache, error: "" });
+  const [state, setState] = React.useState({ loading: !entitiesCache, data: entitiesCache?.filter(inActiveWorkspace), error: "" });
 
   const load = React.useCallback(async (force = false) => {
     if (!force && entitiesCache) {
-      setState({ loading: false, data: entitiesCache, error: "" });
+      setState({ loading: false, data: entitiesCache.filter(inActiveWorkspace), error: "" });
       return;
     }
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
       entitiesCache = await catalog.all();
-      setState({ loading: false, data: entitiesCache, error: "" });
+      setState({ loading: false, data: entitiesCache.filter(inActiveWorkspace), error: "" });
     } catch (err) {
       setState((current) => ({ ...current, loading: false, error: err.message }));
     }
@@ -823,7 +824,8 @@ function Relations({ entity, entities }) {
 
 function Pipelines({ entity }) {
   const definition = annotation(entity, "dev.azure.com/build-definition");
-  const state = useAsync(() => branching.pipelines(), []);
+  // Pipelines del proyecto del componente (Coppel tiene varias organizaciones y proyectos).
+  const state = useAsync(() => branching.pipelines(componentProject(entity)), []);
 
   if (!definition) {
     return <Notice>Este componente no tiene un pipeline de Azure DevOps asociado.</Notice>;
