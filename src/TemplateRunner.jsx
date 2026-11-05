@@ -715,7 +715,11 @@ const suggestCode = (name) => {
  * «Agregar línea de negocio» la da de alta para todos con su nombre y su clave.
  */
 function BusinessLineField({ definition, required, value, onChange, error }) {
-  const state = useAsync(() => access.businessLines(), []);
+  // Solo las líneas de negocio de la ficha del proyecto del encabezado.
+  const project = useProjectProfile();
+  const all = useAsync(() => access.businessLines(), []);
+  const own = project.profile?.businessLines ?? [];
+  const state = { loading: project.loading || all.loading, error: all.error, data: { lines: (all.data?.lines ?? []).filter((l) => own.includes(l.code)) } };
   const [added, setAdded] = React.useState([]);
   const [adding, setAdding] = React.useState(false);
   const [name, setName] = React.useState("");
@@ -730,7 +734,7 @@ function BusinessLineField({ definition, required, value, onChange, error }) {
     setSaving(true);
     setSaveError("");
     try {
-      const { line } = await access.addBusinessLine({ name: name.trim(), code: code.trim().toLowerCase() });
+      const { line } = await access.addProjectBusinessLine(project.key, { name: name.trim(), code: code.trim().toLowerCase() });
       setAdded((current) => [...current, line]);
       onChange(line.code);
       setAdding(false);
@@ -743,6 +747,8 @@ function BusinessLineField({ definition, required, value, onChange, error }) {
       setSaving(false);
     }
   };
+
+  if (!project.loading && !project.profile) return <NoProfile title={definition.title} project={project} />;
 
   return (
     <FieldShell
@@ -763,7 +769,7 @@ function BusinessLineField({ definition, required, value, onChange, error }) {
           onChange(e.target.value || undefined);
         }}
       >
-        <option value="">Selecciona una línea de negocio</option>
+        <option value="">{lines.length ? "Selecciona una línea de negocio" : "El proyecto no tiene líneas de negocio: agrégala"}</option>
         {lines.map((l) => (
           <option key={l.code} value={l.code} title={l.name}>{l.code}</option>
         ))}

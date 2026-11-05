@@ -320,6 +320,8 @@ export const access = {
   projects: () => request("/api/access/projects"),
   project: (key) => request(`/api/access/projects/${encodeURIComponent(key)}`),
   saveProject: (key, body) => request(`/api/access/projects/${encodeURIComponent(key)}`, { method: "PUT", body }),
+  /** Liga una línea de negocio al proyecto (la da de alta si no existe). */
+  addProjectBusinessLine: (key, body) => request(`/api/access/projects/${encodeURIComponent(key)}/business-lines`, { method: "POST", body }),
   addProjectProduct: (key, name) => request(`/api/access/projects/${encodeURIComponent(key)}/products`, { method: "POST", body: { name } }),
   deleteProjectProduct: (key, name) => request(`/api/access/projects/${encodeURIComponent(key)}/products/${encodeURIComponent(name)}`, { method: "DELETE" }),
   /** Bitácora: avisa qué sección abrió la persona. Si falla no pasa nada: la pantalla no depende de esto. */
