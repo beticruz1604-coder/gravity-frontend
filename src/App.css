@@ -3388,3 +3388,23 @@ td.wrap {
   background: #3a2c10;
   color: #f5c46b;
 }
+
+/* «Crear repositorio»: reglas que se aplican, desplegables dentro de la comprobación del nombre. */
+.repository-rules {
+  margin-top: 10px;
+  font-size: 13px;
+}
+.repository-rules summary {
+  cursor: pointer;
+  color: #8fb4ff;
+}
+.repository-rules ul {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+.repository-rules li {
+  margin-bottom: 4px;
+}
+.repository-rules small {
+  color: #7c8a9e;
+}

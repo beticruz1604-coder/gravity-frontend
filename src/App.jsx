@@ -16,7 +16,6 @@ import {
   GitPullRequest,
   Server,
   Users,
-  FolderPlus,
   KeyRound,
   LogOut,
   Gauge,
@@ -67,7 +66,6 @@ import {
   HomologationPage,
   UsersPage,
   RepositoriesPage,
-  RepositoryCreationPage,
   PipelinesPage,
   ReleasesPage,
   ReleaseManagementPage,
@@ -92,7 +90,6 @@ const menuItems = [
   { name: "Homologation Status", icon: CheckCircle },
   { name: "Compliance IQ", icon: ShieldCheck },
   { name: "Repositories", icon: GitBranch },
-  { name: "Creación de Repositorios", icon: FolderPlus },
   { name: "Pipelines", icon: Workflow },
   { name: "Pool de Agentes", icon: Activity },
   { name: "TechDebt", icon: Bug },
@@ -1458,7 +1455,7 @@ function RecentTasks({ version }) {
 
 /*PIPELINE ENGINE*/
 
-function PipelineEnginePage() {
+function PipelineEnginePage({ access }) {
   const [search, setSearch] =
     React.useState("");
 
@@ -1959,8 +1956,8 @@ function PipelineEnginePage() {
 
       {showCreate && (
         <TemplateModal
-          // Las plantillas de «Creación de Repositorios» se usan desde su sección.
-          filter={(t) => !t.metadata.tags?.includes(REPOSITORY_TAG)}
+          // «Crear repositorio» solo se ofrece a SCM y Admin (el backend también lo comprueba al ejecutar).
+          filter={(t) => !t.metadata.tags?.includes(REPOSITORY_TAG) || access?.admin || access?.roles?.some((r) => r.id === "scm")}
           onClose={() =>
             setShowCreate(false)
           }
@@ -2455,10 +2452,6 @@ function App() {
             <RepositoriesPage />
           )}
 
-          {showPages && selectedPage === "Creación de Repositorios" && (
-            <RepositoryCreationPage />
-          )}
-
           {showPages && selectedPage === "Pipelines" && (
             <PipelinesPage />
           )}
@@ -2497,7 +2490,7 @@ function App() {
 
           {showPages && selectedPage ===
             "Pipeline Engine (IDP)" && (
-            <PipelineEnginePage />
+            <PipelineEnginePage access={access} />
           )}
 
           {showPages && selectedPage === "Bitácora" && (
