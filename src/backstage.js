@@ -310,7 +310,7 @@ export const access = {
   /** Productos de la organización (campo «Producto» de los Golden Paths). */
   products: () => request("/api/access/products"),
   addProduct: (name) => request("/api/access/products", { method: "POST", body: { name } }),
-  /** Líneas de negocio del nombre de los repositorios: { code, name }; se agregan desde «Crear repositorio». */
+  /** Sistemas (primera parte del nombre de los repositorios): { code, name }; se agregan desde «Crear repositorio». */
   businessLines: () => request("/api/access/business-lines"),
   addBusinessLine: (body) => request("/api/access/business-lines", { method: "POST", body }),
   /** Tipos de repositorio (sufijo del nombre): { code, name }; se agregan desde «Crear repositorio». */
@@ -320,7 +320,7 @@ export const access = {
   projects: () => request("/api/access/projects"),
   project: (key) => request(`/api/access/projects/${encodeURIComponent(key)}`),
   saveProject: (key, body) => request(`/api/access/projects/${encodeURIComponent(key)}`, { method: "PUT", body }),
-  /** Liga una línea de negocio al proyecto (la da de alta si no existe). */
+  /** Liga un sistema al proyecto (lo da de alta si no existe). */
   addProjectBusinessLine: (key, body) => request(`/api/access/projects/${encodeURIComponent(key)}/business-lines`, { method: "POST", body }),
   addProjectProduct: (key, name) => request(`/api/access/projects/${encodeURIComponent(key)}/products`, { method: "POST", body: { name } }),
   deleteProjectProduct: (key, name) => request(`/api/access/projects/${encodeURIComponent(key)}/products/${encodeURIComponent(name)}`, { method: "DELETE" }),

@@ -476,7 +476,7 @@ function RepositoryNameField({ definition, required, value, onChange, error, opt
 }
 
 /**
- * «Crear repositorio»: arma el nombre con la línea de negocio, la aplicación y el tipo, y pregunta a GRAVITY si cumple las reglas,
+ * «Crear repositorio»: arma el nombre con el sistema, la aplicación y el tipo, y pregunta a GRAVITY si cumple las reglas,
  * si ya existe y si el proyecto es privado. Mientras no se pueda crear, el campo queda vacío y el paso no avanza.
  */
 /**
@@ -703,7 +703,7 @@ function RepositoryTypeField({ definition, required, value, onChange, error }) {
   );
 }
 
-/** Clave sugerida para una línea de negocio nueva: las iniciales del nombre, o la primera palabra si es una sola. */
+/** Clave sugerida para un sistema nuevo: las iniciales del nombre, o la primera palabra si es una sola. */
 const suggestCode = (name) => {
   const words = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
   const code = words.length > 1 ? words.map((w) => w[0]).join("") : (words[0] ?? "");
@@ -711,11 +711,11 @@ const suggestCode = (name) => {
 };
 
 /**
- * Línea de negocio («Crear repositorio»): se ve la clave que va en el nombre del repositorio (cds, digital). Si no está,
- * «Agregar línea de negocio» la da de alta para todos con su nombre y su clave.
+ * Sistema («Crear repositorio»): se ve la clave que va en el nombre del repositorio (tms, wms…). Si no está, «Agregar
+ * sistema» lo da de alta para todos con su nombre y su clave. En la API se sigue llamando línea de negocio (businessLines).
  */
 function BusinessLineField({ definition, required, value, onChange, error }) {
-  // Solo las líneas de negocio de la ficha del proyecto del encabezado.
+  // Solo los sistemas de la ficha del proyecto del encabezado.
   const project = useProjectProfile();
   const all = useAsync(() => access.businessLines(), []);
   const own = project.profile?.businessLines ?? [];
@@ -754,8 +754,8 @@ function BusinessLineField({ definition, required, value, onChange, error }) {
     <FieldShell
       definition={definition}
       required={required}
-      error={error || saveError || (state.error && `No se pudo leer la lista de líneas de negocio: ${state.error}`)}
-      help={state.loading ? "Cargando líneas de negocio…" : undefined}
+      error={error || saveError || (state.error && `No se pudo leer la lista de sistemas: ${state.error}`)}
+      help={state.loading ? "Cargando sistemas…" : undefined}
     >
       <select
         value={adding ? ADD_PRODUCT : value ?? ""}
@@ -769,11 +769,11 @@ function BusinessLineField({ definition, required, value, onChange, error }) {
           onChange(e.target.value || undefined);
         }}
       >
-        <option value="">{lines.length ? "Selecciona una línea de negocio" : "El proyecto no tiene líneas de negocio: agrégala"}</option>
+        <option value="">{lines.length ? "Selecciona un sistema" : "El proyecto no tiene sistemas: agrégalo"}</option>
         {lines.map((l) => (
           <option key={l.code} value={l.code} title={l.name}>{l.code}</option>
         ))}
-        <option value={ADD_PRODUCT}>＋ Agregar línea de negocio…</option>
+        <option value={ADD_PRODUCT}>＋ Agregar sistema…</option>
       </select>
       {adding && (
         <div className="inline-add">
@@ -781,7 +781,7 @@ function BusinessLineField({ definition, required, value, onChange, error }) {
             value={name}
             autoFocus
             maxLength={60}
-            placeholder="Nombre, p. ej. Servicios Financieros"
+            placeholder="Nombre, p. ej. WMS"
             onChange={(e) => {
               setName(e.target.value);
               if (!codeTouched) setCode(suggestCode(e.target.value));
@@ -790,7 +790,7 @@ function BusinessLineField({ definition, required, value, onChange, error }) {
           <input
             value={code}
             maxLength={12}
-            placeholder="Clave, p. ej. sf"
+            placeholder="Clave, p. ej. wms"
             title="Va en el nombre del repositorio: minúsculas y números, sin espacios ni guiones"
             onChange={(e) => {
               setCodeTouched(true);
@@ -860,7 +860,7 @@ function RepositoryNameCheckField({ definition, onChange, options = {}, form, er
   const { result, error, loading } = state;
   let body;
   if (!line || !app) {
-    body = <p>Completa la línea de negocio y la aplicación (y el tipo) para comprobar el nombre.</p>;
+    body = <p>Completa el sistema y la aplicación (y el tipo) para comprobar el nombre.</p>;
   } else if (loading) {
     body = <p>Comprobando el nombre del repositorio…</p>;
   } else if (error) {
