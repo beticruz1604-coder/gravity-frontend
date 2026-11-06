@@ -46,6 +46,7 @@ import {
 import {
   TemplateModal,
   REPOSITORY_TAG,
+  ReadOnlyContext,
   TaskViewer
 } from "./TemplateRunner";
 import { WorkspaceProvider, WorkspaceSelector, useWorkspace, workspaceAgentPools, workspaceKey, workspacePipelines } from "./workspace";
@@ -2369,6 +2370,7 @@ function App() {
   return (
     <NavContext.Provider value={navValue}>
     <WorkspaceProvider enabled={showPages} admin={access.admin}>
+    <ReadOnlyContext.Provider value={Boolean(access.readOnly)}>
     <div className="app">
       <NewVersionBanner />
       <Sidebar
@@ -2520,6 +2522,7 @@ function App() {
         </WorkspaceContent>
       </main>
     </div>
+    </ReadOnlyContext.Provider>
     </WorkspaceProvider>
     </NavContext.Provider>
   );

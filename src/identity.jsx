@@ -27,7 +27,7 @@ export function initials(name) {
  * Acceso de la persona: { loading, error, authenticated, roles, sections, admin, managed, mustChangePassword, signIn, signOut, changePassword }.
  * `sections` viene del backend (GET /api/access/me); mientras carga o si falla no se muestra ninguna sección.
  */
-const SIN_ACCESO = { authenticated: false, roles: [], sections: [], admin: false, managed: false, mustChangePassword: false };
+const SIN_ACCESO = { authenticated: false, roles: [], sections: [], admin: false, readOnly: false, managed: false, mustChangePassword: false };
 
 export function useAccess() {
   const [state, setState] = React.useState({ loading: true, error: null, ...SIN_ACCESO });
@@ -41,6 +41,8 @@ export function useAccess() {
         roles: me.roles ?? [],
         sections: me.sections ?? [],
         admin: Boolean(me.admin),
+        // Solo consulta (por ejemplo, Gerente): ve sus secciones pero no ejecuta solicitudes.
+        readOnly: Boolean(me.readOnly),
         managed: Boolean(me.managed),
         mustChangePassword: Boolean(me.mustChangePassword),
         // Reglas y caducidad de la contraseña (solo cuentas creadas desde GRAVITY).
