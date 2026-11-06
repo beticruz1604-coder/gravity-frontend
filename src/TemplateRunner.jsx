@@ -1754,8 +1754,13 @@ export function TemplateModal({ onClose, template, preset, filter, title = "Crea
 }
 
 /** Botón que abre el modal ya posicionado en una plantilla. */
+/** true si la persona solo consulta (rol de solo lectura): los botones que ejecutan solicitudes no se muestran. */
+export const ReadOnlyContext = React.createContext(false);
+
 export function TemplateButton({ template, preset, label, className = "pipeline-action", onFinished, disabled, title }) {
   const [open, setOpen] = React.useState(false);
+  const readOnly = React.useContext(ReadOnlyContext);
+  if (readOnly) return null;
   return (
     <>
       <button className={className} disabled={disabled} onClick={() => setOpen(true)}>{label}</button>
