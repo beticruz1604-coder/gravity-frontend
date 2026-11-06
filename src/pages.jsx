@@ -1589,7 +1589,7 @@ function ProjectsPanel({ busy, run }) {
       </div>
       <div className="table-wrapper">
         <table className="pool-table">
-          <thead><tr><th>Proyecto</th><th>División</th><th>Líneas de negocio</th><th>Dominios / Torres</th><th>Productos</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Proyecto</th><th>División</th><th>Sistemas</th><th>Dominios / Torres</th><th>Productos</th><th>Acciones</th></tr></thead>
           <tbody>
             {keys.length === 0 && <EmptyRow colSpan={6} loading={loader.loading}>Sin proyectos.</EmptyRow>}
             {keys.map((key) => {
@@ -1612,7 +1612,7 @@ function ProjectsPanel({ busy, run }) {
                   </td>
                   <td>
                     {isEditing ? (
-                      <input type="text" className="inline-input" value={draft.lines} onChange={(e) => setDraft({ ...draft, lines: e.target.value })} placeholder="cds" />
+                      <input type="text" className="inline-input" value={draft.lines} onChange={(e) => setDraft({ ...draft, lines: e.target.value })} placeholder="tms, wms, oms" />
                     ) : (p?.businessLines ?? []).join(", ") || "—"}
                   </td>
                   <td>
