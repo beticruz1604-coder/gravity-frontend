@@ -1127,6 +1127,48 @@ function PreviewField({ definition, onChange, options = {}, form, error: blocked
 const BRANCH_NAME_PARTS = ["id", "description", "number", "version"];
 
 /**
+ * Lo que va delante de un dato en el nombre de la rama, según la plantilla del tipo (branches[].nameTemplate de la
+ * estrategia). Los datos anteriores se rellenan con lo que ya se escribió; {-dato} solo pone el guion si hay dato. Si el tipo
+ * admite un nombre en lugar del consecutivo (namedTemplate, como team), se elige por lo escrito: solo dígitos → nameTemplate;
+ * con letras → namedTemplate; vacío → la parte común de las dos (team/).
+ */
+export function branchPrefix(spec, part, form) {
+  if (!spec?.nameTemplate) return "";
+  const prefixIn = (template) => {
+    const m = new RegExp(`\\{-?${part}\\}`).exec(template);
+    if (!m) return null;
+    const before = template.slice(0, m.index).replace(/\{(-?)(\w+)\}/g, (_x, optional, key) => {
+      const v = String(form[key] ?? "").trim();
+      return v ? (optional ? `-${v}` : v) : "";
+    });
+    return m[0].startsWith("{-") && !before.endsWith("-") ? `${before}-` : before;
+  };
+  const main = prefixIn(spec.nameTemplate) ?? "";
+  if (!spec.namedTemplate || part !== "number") return main;
+  const named = prefixIn(spec.namedTemplate) ?? main;
+  const typed = String(form[part] ?? "").trim();
+  if (!typed) {
+    let i = 0;
+    while (i < main.length && main[i] === named[i]) i++;
+    return main.slice(0, i);
+  }
+  return /^[0-9]+$/.test(typed) ? main : named;
+}
+
+/** Campo de texto con el comienzo del nombre de la rama fijo delante. */
+function BranchPartInput({ name, roleField, form, value, onChange }) {
+  const rules = useAsync(() => branching.rules(), []);
+  const spec = (rules.data?.branches ?? []).find((b) => b.id === form[roleField]);
+  const prefix = branchPrefix(spec, name, form);
+  return (
+    <span className="input-prefixed">
+      {prefix && <span className="input-prefix" aria-hidden="true">{prefix}</span>}
+      <input type="text" value={value ?? ""} aria-label={prefix ? `Nombre de la rama: ${prefix}` : undefined} onChange={(e) => onChange(e.target.value)} />
+    </span>
+  );
+}
+
+/**
  * Comprobación de «Crear una rama» antes de ejecutar: calcula el nombre final, valida las convenciones y consulta si la
  * rama ya existe. Si existe (o no cumple) bloquea el avance: el campo queda vacío hasta que el nombre sea válido y esté libre.
  */
@@ -1294,6 +1336,15 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
     return (
       <FieldShell definition={definition} required={required} error={error}>
         <textarea rows={4} value={value ?? ""} onChange={(e) => set(name, e.target.value)} />
+      </FieldShell>
+    );
+  }
+
+  // Dato del nombre de una rama (crear-rama): delante va lo que ya se sabe del nombre final (team/, release/release-…).
+  if (options?.branchPrefix) {
+    return (
+      <FieldShell definition={definition} required={required} error={error}>
+        <BranchPartInput name={name} roleField={options.branchPrefix} form={form} value={value} onChange={(v) => set(name, v)} />
       </FieldShell>
     );
   }
