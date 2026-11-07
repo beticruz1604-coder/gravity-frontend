@@ -181,8 +181,52 @@ export async function workspaceComponents() {
   return all.filter((e) => inWorkspace(e, active.workspace, active.targets?.defaultOrganization));
 }
 
-/** Filtro para listas de entidades del catálogo ya cargadas. */
+/** Filtro para listas de entidades del catálogo ya cargadas (solo decide por la entidad misma; ver scopeToWorkspace). */
 export const inActiveWorkspace = (entity) => inWorkspace(entity, active.workspace, active.targets?.defaultOrganization);
+
+const refOf = (e) => `${e.kind.toLowerCase()}:${e.metadata.namespace ?? "default"}/${e.metadata.name}`;
+const ann = (e, k) => e?.metadata?.annotations?.[k];
+const norm = (s) => String(s ?? "").trim().toLowerCase();
+
+/**
+ * Catálogo de la organización y el proyecto elegidos. Los componentes se filtran por su repositorio. Lo que no tiene
+ * repositorio se filtra por su relación con esos componentes:
+ * - Dominio / Torre y Producto / Sistema: si algún componente del proyecto los usa (devops.lab/division, devops.lab/initiative
+ *   o spec.system).
+ * - División: si es dueña de algún componente del proyecto.
+ * - API y recurso: si un componente del proyecto los provee, consume o depende de ellos, o si son de un sistema y una división
+ *   del proyecto.
+ * Personas, grupos de roles, plantillas y ubicaciones no se filtran.
+ */
+export function scopeToWorkspace(entities, workspace = active.workspace, defaultOrganization = active.targets?.defaultOrganization) {
+  if (!workspace || workspace.platform === "all") return entities;
+  const components = entities.filter((e) => e.kind === "Component" && inWorkspace(e, workspace, defaultOrganization));
+  const rel = (e, types) => (e.relations ?? []).filter((r) => types.includes(r.type)).map((r) => r.targetRef);
+  const owners = new Set(components.flatMap((c) => rel(c, ["ownedBy"])));
+  const systems = new Set(components.flatMap((c) => rel(c, ["partOf"])));
+  const used = new Set(components.flatMap((c) => rel(c, ["providesApi", "consumesApi", "dependsOn"])));
+  const domains = new Set(components.map((c) => norm(ann(c, "devops.lab/division"))).filter(Boolean));
+  const initiatives = new Set(components.map((c) => norm(ann(c, "devops.lab/initiative"))).filter(Boolean));
+  const value = (e) => norm(ann(e, "devops.lab/classification-value") ?? e.metadata.title ?? e.metadata.name);
+  const keep = (e) => {
+    switch (e.kind) {
+      case "Component":
+        return components.includes(e);
+      case "Domain":
+        return domains.has(value(e)) || domains.has(norm(e.metadata.name));
+      case "System":
+        return systems.has(refOf(e)) || initiatives.has(value(e)) || initiatives.has(norm(e.metadata.name));
+      case "Group":
+        return e.spec?.type !== "business-unit" || owners.has(refOf(e));
+      case "API":
+      case "Resource":
+        return used.has(refOf(e)) || (rel(e, ["partOf"]).some((s) => systems.has(s)) && rel(e, ["ownedBy"]).some((o) => owners.has(o)));
+      default:
+        return true;
+    }
+  };
+  return entities.filter(keep);
+}
 
 /** Pipelines de los proyectos elegidos (todos los de la organización si no se eligió uno), con su proyecto. */
 export async function workspacePipelines() {
