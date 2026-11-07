@@ -268,7 +268,8 @@ function ComponentField({ definition, required, value, onChange, error, options 
   const requirePipeline = options.requirePipeline !== false;
   const state = useAsync(() => workspaceComponents(), []);
   const all = state.data ?? [];
-  const items = all.filter(requirePipeline ? isDeployable : hasRepository);
+  // Un repositorio vacío (sin ramas; devops.lab/empty, lo marca el descubrimiento de repositorios) no sirve para operar.
+  const items = all.filter((e) => (requirePipeline ? isDeployable(e) : hasRepository(e)) && e.metadata.annotations?.["devops.lab/empty"] !== "true");
   const withoutPipeline = requirePipeline ? all.filter((e) => hasRepository(e) && !isDeployable(e)).length : 0;
 
   return (
