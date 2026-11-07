@@ -22,6 +22,7 @@ import {
   branching,
   catalog,
   scaffolder,
+  hasRepository,
   isDeployable,
   repoOf
 } from "./backstage";
@@ -260,10 +261,15 @@ function ComponentProjectField({ definition, value, onChange, options = {}, form
   );
 }
 
-function ComponentField({ definition, required, value, onChange, error }) {
-  // Solo los componentes de la organización y el proyecto elegidos en el encabezado.
+function ComponentField({ definition, required, value, onChange, error, options = {} }) {
+  // Solo los componentes de la organización y el proyecto elegidos en el encabezado. Por defecto, además, con pipeline de
+  // Azure DevOps (integrar, desplegar). requirePipeline: false (Crear una rama) acepta los que solo tienen repositorio, como
+  // los que crea «Crear repositorio» antes de conectarse al arquetipo.
+  const requirePipeline = options.requirePipeline !== false;
   const state = useAsync(() => workspaceComponents(), []);
-  const items = (state.data ?? []).filter(isDeployable);
+  const all = state.data ?? [];
+  const items = all.filter(requirePipeline ? isDeployable : hasRepository);
+  const withoutPipeline = requirePipeline ? all.filter((e) => hasRepository(e) && !isDeployable(e)).length : 0;
 
   return (
     <FieldShell
@@ -274,8 +280,12 @@ function ComponentField({ definition, required, value, onChange, error }) {
         state.loading
           ? "Consultando el catálogo…"
           : items.length === 0
-            ? "No hay componentes con repositorio y pipeline de Azure DevOps."
-            : undefined
+            ? requirePipeline
+              ? `No hay componentes con repositorio y pipeline de Azure DevOps en este proyecto.${withoutPipeline ? ` ${withoutPipeline === 1 ? "Hay 1 sin pipeline" : `Hay ${withoutPipeline} sin pipeline`}: aparecen aquí cuando se conectan al arquetipo.` : ""}`
+              : "No hay componentes con repositorio en este proyecto."
+            : withoutPipeline
+              ? `${withoutPipeline === 1 ? "1 componente no aparece" : `${withoutPipeline} componentes no aparecen`} porque aún no tiene pipeline.`
+              : undefined
       }
     >
       <select
@@ -1211,7 +1221,7 @@ function SchemaField({ name, definition, required, form, set, error, onBlock }) 
 
   switch (definition["ui:field"]) {
     case "ComponentPicker":
-      return <ComponentField {...common} />;
+      return <ComponentField {...common} options={options} />;
     case "OwnerPicker":
       return <OwnerField {...common} />;
     case "ProductPicker":

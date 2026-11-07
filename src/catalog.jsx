@@ -1,5 +1,5 @@
 import React from "react";
-import { componentProject, inActiveWorkspace } from "./workspace";
+import { componentProject, scopeToWorkspace } from "./workspace";
 import { dump, load } from "js-yaml";
 import DOMPurify from "dompurify";
 import {
@@ -38,17 +38,17 @@ let entitiesCache;
 
 /** Entidades del catálogo (una sola consulta compartida entre pantallas). */
 export function useEntities() {
-  const [state, setState] = React.useState({ loading: !entitiesCache, data: entitiesCache?.filter(inActiveWorkspace), error: "" });
+  const [state, setState] = React.useState({ loading: !entitiesCache, data: entitiesCache && scopeToWorkspace(entitiesCache), error: "" });
 
   const load = React.useCallback(async (force = false) => {
     if (!force && entitiesCache) {
-      setState({ loading: false, data: entitiesCache.filter(inActiveWorkspace), error: "" });
+      setState({ loading: false, data: scopeToWorkspace(entitiesCache), error: "" });
       return;
     }
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
       entitiesCache = await catalog.all();
-      setState({ loading: false, data: entitiesCache.filter(inActiveWorkspace), error: "" });
+      setState({ loading: false, data: scopeToWorkspace(entitiesCache), error: "" });
     } catch (err) {
       setState((current) => ({ ...current, loading: false, error: err.message }));
     }

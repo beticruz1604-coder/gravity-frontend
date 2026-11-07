@@ -467,6 +467,11 @@ export function annotation(entity, key) {
   return entity?.metadata?.annotations?.[key];
 }
 
+/** ¿El componente tiene repositorio (Azure DevOps o GitHub)? */
+export function hasRepository(entity) {
+  return Boolean(annotation(entity, "dev.azure.com/project-repo") || annotation(entity, "github.com/project-slug"));
+}
+
 export function isDeployable(entity) {
   return Boolean(
     annotation(entity, "dev.azure.com/project-repo") &&
